@@ -26,22 +26,34 @@ declare global {
     }
 }
 
+// 驗證 Gemini API Key 格式
+const isValidApiKeyFormat = (key: string | null | undefined): boolean => {
+    if (!key || typeof key !== 'string') return false;
+    const trimmed = key.trim();
+    // 檢查是否為預設值或空字符串
+    if (trimmed === '' || trimmed === 'your-api-key-here') return false;
+    // Gemini API keys 通常以 'AI' 開頭，長度約 39 字符
+    // 這是一個基本檢查，不保證 key 有效，但可以過濾明顯無效的值
+    if (trimmed.length < 20) return false;
+    return true;
+};
+
 const App: React.FC = () => {
     const [status, setStatus] = useState<AppStatus>(AppStatus.Initializing);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    
+
     // 用戶認證狀態
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<string>('user');
     const [showAdminPanel, setShowAdminPanel] = useState(false);
-    
+
     const [stores, setStores] = useState<RagStore[]>([]);
     const [selectedStore, setSelectedStore] = useState<RagStore | null>(null);
     const [documents, setDocuments] = useState<Document[]>([]);
-    
+
     const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number, message?: string, fileName?: string } | null>(null);
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [isQueryLoading, setIsQueryLoading] = useState(false);
@@ -71,7 +83,7 @@ const App: React.FC = () => {
         setCurrentUser(username);
         setUserRole(role);
         setIsAuthenticated(true);
-        
+
         // 如果用戶有儲存的 Gemini API Key，自動設定
         if (geminiApiKey) {
             console.log('[App] Loading user\'s Gemini API Key from backend');
@@ -114,38 +126,42 @@ const App: React.FC = () => {
                 console.warn("[App] Auto-login check failed", e);
             }
         }
-        
+
         // Try to load API key from .env file
         const envKey = process.env.GEMINI_API_KEY;
-        if (envKey && envKey !== 'your-api-key-here') {
-            console.log('[App] Found API key in .env file');
+        if (isValidApiKeyFormat(envKey)) {
+            console.log('[App] Found valid API key in .env file');
             try {
-                geminiService.setApiKey(envKey);
+                geminiService.setApiKey(envKey!);
                 setIsApiKeySelected(true);
                 await refreshStores();
                 console.log('[App] Auto-login successful from .env');
                 return true;
             } catch (e) {
-                console.warn("[App] .env API key failed", e);
+                console.warn("[App] .env API key failed validation", e);
+                setIsApiKeySelected(false);
             }
         }
-        
+
         // Try to load API key from localStorage
         const savedKey = localStorage.getItem('gemini_api_key');
-        if (savedKey) {
-            console.log('[App] Found saved API key in localStorage');
+        if (isValidApiKeyFormat(savedKey)) {
+            console.log('[App] Found valid saved API key in localStorage');
             try {
-                geminiService.setApiKey(savedKey);
+                geminiService.setApiKey(savedKey!);
                 setIsApiKeySelected(true);
                 await refreshStores();
                 console.log('[App] Auto-login successful from localStorage');
                 return true;
             } catch (e) {
-                console.warn("[App] Saved API key failed", e);
+                console.warn("[App] Saved API key failed validation", e);
                 localStorage.removeItem('gemini_api_key');
+                setIsApiKeySelected(false);
             }
         }
-        console.log('[App] No auto-login available');
+
+        console.log('[App] No valid auto-login available');
+        setIsApiKeySelected(false);
         return false;
     }, []);
 
@@ -154,16 +170,17 @@ const App: React.FC = () => {
         const msg = err instanceof Error ? err.message : JSON.stringify(err);
         console.error(`API Error [${context}]:`, err);
 
-        // Check for 404 (Not Found - likely invalid project/key) or 403 (Permission Denied)
-        if (msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+        // Check for 404 (Not Found - likely invalid project/key), 403 (Permission Denied), or 400 (Invalid Key)
+        if (msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('403') || msg.includes('PERMISSION_DENIED') ||
+            msg.includes('400') || msg.includes('INVALID_ARGUMENT') || msg.includes('API key not valid')) {
             setIsApiKeySelected(false);
-            
+
             // Clean up message for display
             const shortMsg = msg.length > 150 ? msg.substring(0, 150) + '...' : msg;
-            
+
             setApiKeyError(
                 `Connection failed. If you just updated the key, please wait 5 minutes.\n\n` +
-                `Troubleshooting:\n` + 
+                `Troubleshooting:\n` +
                 `1. Ensure "Generative Language API" is ENABLED in your Project Library (not just the key).\n` +
                 `2. Verify Key Restrictions allow "Generative Language API".\n\n` +
                 `Error: ${shortMsg}`
@@ -188,7 +205,7 @@ const App: React.FC = () => {
                 : list;
             setStores(userStores);
             console.log(`[App] Stores refreshed: ${userStores.length} stores found for user ${currentUser}`);
-            setStatus(AppStatus.Manager); 
+            setStatus(AppStatus.Manager);
         } catch (err) {
             console.error('[App] Failed to refresh stores:', err);
             handleApiError(err, "Fetching Spaces");
@@ -200,7 +217,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const init = async () => {
             await new Promise(r => setTimeout(r, 500));
-            
+
             // 檢查是否有已登入的用戶
             const savedAuth = localStorage.getItem('auth_user');
             if (savedAuth) {
@@ -208,17 +225,24 @@ const App: React.FC = () => {
                     const authData = JSON.parse(savedAuth);
                     console.log('[App] Found saved auth:', authData);
                     handleLogin(
-                        authData.username, 
-                        authData.role, 
+                        authData.username,
+                        authData.role,
                         authData.spaces || [],
                         authData.geminiApiKey || null
                     );
-                    
+
                     // 如果沒有 API Key，嘗試自動登入
                     if (!authData.geminiApiKey) {
-                        const autoLoggedIn = await attemptAutoLogin();
-                        if (!autoLoggedIn) {
+                        try {
+                            const autoLoggedIn = await attemptAutoLogin();
+                            if (!autoLoggedIn) {
+                                setStatus(AppStatus.Manager);
+                                setIsApiKeySelected(false);
+                            }
+                        } catch (e) {
+                            console.warn('[App] Auto-login failed', e);
                             setStatus(AppStatus.Manager);
+                            setIsApiKeySelected(false);
                         }
                     }
                     return;
@@ -227,7 +251,7 @@ const App: React.FC = () => {
                     localStorage.removeItem('auth_user');
                 }
             }
-            
+
             // 沒有登入，顯示登入頁面
             setStatus(AppStatus.Welcome);
         };
@@ -249,7 +273,7 @@ const App: React.FC = () => {
             geminiService.setApiKey(trimmedKey);
             localStorage.setItem('gemini_api_key', trimmedKey);
             console.log('[App] API key saved to localStorage');
-            
+
             // 傳送到後端持久化
             if (currentUser) {
                 try {
@@ -261,7 +285,7 @@ const App: React.FC = () => {
                         },
                         body: JSON.stringify({ geminiApiKey: trimmedKey })
                     });
-                    
+
                     if (response.ok) {
                         console.log('[App] Gemini API key saved to backend');
                     } else {
@@ -271,7 +295,7 @@ const App: React.FC = () => {
                     console.error('[App] Error saving API key to backend:', err);
                 }
             }
-            
+
             setIsApiKeySelected(true);
             await refreshStores();
         } catch (err) {
@@ -300,11 +324,38 @@ const App: React.FC = () => {
             // If it was a critical API error, handleApiError will switch status to Manager and disconnect
             // If it was a generic error, we might be stuck in Uploading state, so reset to Manager
             if (isApiKeySelected) {
-                 setStatus(AppStatus.Manager);
+                setStatus(AppStatus.Manager);
             }
         } finally {
             setUploadProgress(null);
         }
+    };
+
+    const disconnectApiKey = async () => {
+        console.log('[App] Disconnecting API key...');
+        localStorage.removeItem('gemini_api_key');
+
+        // 如果是登入用戶，也要清除後端的 key
+        if (currentUser) {
+            try {
+                // 發送空值或特殊值來清除 key
+                await fetch(`/api/users/${currentUser}/gemini-key`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-username': currentUser
+                    },
+                    body: JSON.stringify({ geminiApiKey: null })
+                });
+                console.log('[App] Backend API key cleared');
+            } catch (e) {
+                console.warn('[App] Failed to clear backend API key', e);
+            }
+        }
+
+        setIsApiKeySelected(false);
+        setApiKeyError(null);
+        setStatus(AppStatus.Manager);
     };
 
     const handleSelectStore = async (store: RagStore) => {
@@ -397,12 +448,12 @@ const App: React.FC = () => {
         if (showAdminPanel && userRole === 'admin') {
             return <AdminPage currentUsername={currentUser!} onBack={() => setShowAdminPanel(false)} />;
         }
-        
+
         // 如果未登入，顯示登入頁面
         if (!isAuthenticated) {
             return <LoginPage onLogin={handleLogin} />;
         }
-        
+
         switch (status) {
             case AppStatus.Initializing:
                 return <div className="flex flex-col items-center justify-center h-screen"><Spinner /><p className="mt-4">Loading Knowledge Manager...</p></div>;
@@ -430,7 +481,7 @@ const App: React.FC = () => {
                                 </button>
                             </div>
                         </div>
-                        <WelcomeScreen 
+                        <WelcomeScreen
                             stores={stores}
                             onSelectStore={handleSelectStore}
                             onDeleteStore={handleDeleteStore}
@@ -439,14 +490,15 @@ const App: React.FC = () => {
                             onSelectKey={handleManualApiKey}
                             isLoading={isLoadingSpaces}
                             apiKeyError={apiKeyError}
+                            onDisconnect={disconnectApiKey}
                         />
                     </div>
                 );
             case AppStatus.Uploading:
-                return <ProgressBar 
-                    progress={uploadProgress?.current || 0} 
-                    total={uploadProgress?.total || 1} 
-                    message={uploadProgress?.message || "Working..."} 
+                return <ProgressBar
+                    progress={uploadProgress?.current || 0}
+                    total={uploadProgress?.total || 1}
+                    message={uploadProgress?.message || "Working..."}
                     fileName={uploadProgress?.fileName}
                 />;
             case AppStatus.Chatting:
@@ -455,15 +507,15 @@ const App: React.FC = () => {
                         <div className="w-80 border-r border-gem-mist bg-gem-slate overflow-y-auto hidden md:block">
                             <div className="p-4 flex flex-col h-full">
                                 <button onClick={async () => { await refreshStores(); setStatus(AppStatus.Manager); }} className="mb-4 text-sm font-semibold text-gem-blue hover:underline">← Back to Manager</button>
-                                
+
                                 {selectedStore && (
-                                    <ApiInfo 
+                                    <ApiInfo
                                         spaceName={selectedStore.name}
                                         displayName={selectedStore.displayName}
                                         username={currentUser || undefined}
                                     />
                                 )}
-                                <DocumentList 
+                                <DocumentList
                                     selectedStore={selectedStore}
                                     documents={documents}
                                     isLoading={false}
@@ -476,8 +528,8 @@ const App: React.FC = () => {
                                     }}
                                 />
                                 <div className="mt-auto pt-4 border-t border-gem-mist">
-                                    <button 
-                                        onClick={() => { if(confirm("Clear chat history?")) { setChatHistory([]); saveHistory(selectedStore!.name, []); }}}
+                                    <button
+                                        onClick={() => { if (confirm("Clear chat history?")) { setChatHistory([]); saveHistory(selectedStore!.name, []); } }}
                                         className="w-full py-2 text-xs text-red-500 hover:bg-red-50 rounded"
                                     >
                                         Clear History
@@ -486,7 +538,7 @@ const App: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex-grow">
-                            <ChatInterface 
+                            <ChatInterface
                                 documentName={selectedStore?.displayName || ''}
                                 history={chatHistory}
                                 isQueryLoading={isQueryLoading}
@@ -498,7 +550,16 @@ const App: React.FC = () => {
                     </div>
                 );
             case AppStatus.Error:
-                return <div className="flex flex-col items-center justify-center h-screen p-8 text-center"><h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1><p>{error}</p><button onClick={() => setStatus(AppStatus.Manager)} className="mt-4 px-4 py-2 bg-gem-blue text-white rounded">Reset</button></div>;
+                return (
+                    <div className="flex flex-col items-center justify-center h-screen p-8 text-center">
+                        <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+                        <p>{error}</p>
+                        <div className="flex gap-4 mt-4">
+                            <button onClick={() => setStatus(AppStatus.Manager)} className="px-4 py-2 bg-gem-blue text-white rounded">Retry</button>
+                            <button onClick={disconnectApiKey} className="px-4 py-2 bg-gray-600 text-white rounded">Reset API Key</button>
+                        </div>
+                    </div>
+                );
             default:
                 return <div className="flex items-center justify-center h-screen"><Spinner /></div>;
         }

@@ -58,6 +58,12 @@ function initializeAdmin() {
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
+    // 驗證 .env 中的 API Key 是否有效
+    const envApiKey = process.env.GEMINI_API_KEY;
+    const isValidEnvKey = envApiKey &&
+        envApiKey !== 'your-api-key-here' &&
+        envApiKey.trim().length > 20;
+
     if (!users.users[adminUsername]) {
         // 管理員不存在，創建新的
         const hashedPassword = bcrypt.hashSync(adminPassword, 10);
@@ -65,12 +71,15 @@ function initializeAdmin() {
             password: hashedPassword,
             role: 'admin',
             spaces: [],
-            geminiApiKey: process.env.GEMINI_API_KEY || null,
+            geminiApiKey: isValidEnvKey ? envApiKey : null,
             createdAt: new Date().toISOString()
         };
         users.lastModified = new Date().toISOString();
         writeJSONFile(USERS_FILE, users);
         console.log(`[Server] Admin user created: ${adminUsername}`);
+        if (isValidEnvKey) {
+            console.log(`[Server] Admin Gemini API Key loaded from .env`);
+        }
     } else {
         // 管理員已存在，檢查密碼是否變更
         const isPasswordMatch = bcrypt.compareSync(adminPassword, users.users[adminUsername].password);
@@ -86,9 +95,9 @@ function initializeAdmin() {
             console.log(`[Server] Admin password updated successfully`);
         }
 
-        // 同步更新 Gemini API Key（如果 .env 有設定）
-        if (process.env.GEMINI_API_KEY && users.users[adminUsername].geminiApiKey !== process.env.GEMINI_API_KEY) {
-            users.users[adminUsername].geminiApiKey = process.env.GEMINI_API_KEY;
+        // 同步更新 Gemini API Key（只有當 .env 有有效的 key 時）
+        if (isValidEnvKey && users.users[adminUsername].geminiApiKey !== envApiKey) {
+            users.users[adminUsername].geminiApiKey = envApiKey;
             users.lastModified = new Date().toISOString();
             writeJSONFile(USERS_FILE, users);
             console.log(`[Server] Admin Gemini API Key synced from .env`);

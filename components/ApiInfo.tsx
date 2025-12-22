@@ -37,7 +37,7 @@ const ApiInfo: React.FC<ApiInfoProps> = ({ spaceName, displayName, username }) =
 
             const response = await fetch(`/api/spaces/${encodeURIComponent(spaceName)}/generate-key`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     ...(username ? { 'x-username': username } : {})
                 },
@@ -53,10 +53,10 @@ const ApiInfo: React.FC<ApiInfoProps> = ({ spaceName, displayName, username }) =
             // 使用相對路徑或當前域名
             const baseUrl = window.location.origin;
             setEndpoint(`${baseUrl}/v1/chat/completions`);
-            
+
             // 保存到 localStorage
             localStorage.setItem(`api_key_${spaceName}`, data.apiKey);
-            
+
         } catch (error) {
             console.error('Failed to generate API key:', error);
             alert('生成 API Key 失敗，請確保 API Server 正在運行 (npm run server)');
@@ -65,10 +65,39 @@ const ApiInfo: React.FC<ApiInfoProps> = ({ spaceName, displayName, username }) =
         }
     };
 
-    const copyToClipboard = (text: string, type: 'key' | 'endpoint') => {
-        navigator.clipboard.writeText(text);
-        setCopied(type);
-        setTimeout(() => setCopied(null), 2000);
+    const copyToClipboard = async (text: string, type: 'key' | 'endpoint') => {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                setCopied(type);
+                setTimeout(() => setCopied(null), 2000);
+            } else {
+                throw new Error('Clipboard API unavailable');
+            }
+        } catch (err) {
+            // Fallback for non-secure contexts (HTTP)
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                if (successful) {
+                    setCopied(type);
+                    setTimeout(() => setCopied(null), 2000);
+                } else {
+                    console.error('Fallback copy failed');
+                }
+            } catch (fallbackErr) {
+                console.error('Copy failed:', fallbackErr);
+            }
+        }
     };
 
     const curlExample = apiKey ? `curl -X POST ${endpoint} \\
@@ -159,7 +188,7 @@ const ApiInfo: React.FC<ApiInfoProps> = ({ spaceName, displayName, username }) =
                             <li>自動使用此 Space 的文件進行 RAG 查詢</li>
                         </ul>
                     </div>
-                    
+
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
                         <p className="font-semibold mb-1">🔐 重要說明：</p>
                         <p className="text-yellow-700">
