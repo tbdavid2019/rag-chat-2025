@@ -16,6 +16,12 @@ export function setApiKey(key: string) {
     console.log('[GeminiService] API Key set successfully');
 }
 
+export function clearApiKey() {
+    console.log('[GeminiService] Clearing API Key...');
+    customApiKey = null;
+    initialize();
+}
+
 export function initialize() {
     // Prioritize custom key, then env key.
     // Note: process.env.API_KEY might be empty in some environments.
@@ -78,7 +84,7 @@ export async function createRagStore(displayName: string): Promise<string> {
 export async function uploadToRagStore(ragStoreName: string, file: File): Promise<void> {
     checkInitialized();
     console.log(`[GeminiService] Uploading file: ${file.name} to store: ${ragStoreName}`);
-    
+
     let op = await ai.fileSearchStores.uploadToFileSearchStore({
         file: file,
         fileSearchStoreName: ragStoreName,
@@ -90,7 +96,7 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
     console.log('[GeminiService] Upload initiated, waiting for completion...');
     while (!op.done) {
         await delay(3000);
-        op = await ai.operations.get({operation: op});
+        op = await ai.operations.get({ operation: op });
         console.log('[GeminiService] Upload in progress...');
     }
     console.log(`[GeminiService] File uploaded successfully: ${file.name}`);
@@ -138,14 +144,14 @@ export async function generateExampleQuestions(ragStoreName: string): Promise<st
                 ]
             }
         });
-        
+
         let jsonText = response.text.trim();
         const jsonMatch = jsonText.match(/```json\n([\s\S]*?)\n```/) || jsonText.match(/\[([\s\S]*?)\]/);
-        
+
         if (jsonMatch) {
             jsonText = jsonMatch[0].replace(/```json|```/g, '');
         }
-        
+
         const parsedData = JSON.parse(jsonText);
         return Array.isArray(parsedData) ? parsedData.slice(0, 4) : [];
     } catch (error) {

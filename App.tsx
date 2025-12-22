@@ -98,15 +98,7 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleLogout = useCallback(() => {
-        console.log('[App] User logged out');
-        localStorage.removeItem('auth_user');
-        setCurrentUser(null);
-        setUserRole('user');
-        setIsAuthenticated(false);
-        setShowAdminPanel(false);
-        setStatus(AppStatus.Initializing);
-    }, []);
+
 
     const attemptAutoLogin = useCallback(async () => {
         console.log('[App] Attempting auto-login...');
@@ -193,16 +185,75 @@ const App: React.FC = () => {
         }
     };
 
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setUserRole('user');
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('gemini_api_key');
+        setApiKeyError(null);
+        setIsApiKeySelected(false);
+        setStores([]);
+        setSelectedStore(null);
+        setChatHistory([]);
+        geminiService.clearApiKey(); // Clear backend service state
+        console.log('[App] User logged out and service state cleared');
+        setStatus(AppStatus.Welcome); // Redirect to login page
+    };
+
     const refreshStores = async () => {
         console.log('[App] Refreshing stores list...');
+        // 如果沒有選中 API Key，不應該嘗試獲取 store
+        // 除非是 admin 正在查看所有 store (但這裡 admin 也應該有自己的 key)
+        // 為了安全，如果沒有 setIsApiKeySelected(true)，我們清空 stores
+        if (!isApiKeySelected && !localStorage.getItem('gemini_api_key')) {
+            console.log('[App] No API key selected, clearing stores.');
+            setStores([]);
+            return;
+        }
+
         setIsLoadingSpaces(true);
         setApiKeyError(null);
         try {
             const list = await geminiService.listRagStores();
+
+            // 從後端獲取 API Keys 來補充正確的 displayName
+            // 因為 Gemini API 返回的 displayName 不可靠
+            try {
+                const response = await fetch('/api/spaces/list-with-keys', {
+                    headers: currentUser ? { 'x-username': currentUser } : {}
+                });
+                if (response.ok) {
+                    const apiKeysData = await response.json();
+                    console.log('[App] API Keys data:', apiKeysData);
+
+                    // 創建一個 spaceName -> displayName 的映射
+                    const displayNameMap: Record<string, string> = {};
+                    Object.values(apiKeysData.apiKeys || {}).forEach((keyData: any) => {
+                        if (keyData.spaceName && keyData.displayName) {
+                            displayNameMap[keyData.spaceName] = keyData.displayName;
+                        }
+                    });
+
+                    // 用後端的 displayName 覆蓋 Gemini 返回的
+                    list.forEach(store => {
+                        if (displayNameMap[store.name]) {
+                            store.displayName = displayNameMap[store.name];
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('[App] Failed to fetch API keys for displayName mapping:', e);
+            }
+
             // 數據隔離：只顯示屬於當前用戶的 spaces
+            // Admin users might see all, but currently implementation implies admin also needs a key
+            // For now, adhere to "only see own spaces" unless explicitly changed for admin
             const userStores = currentUser
-                ? list.filter(store => store.name.startsWith(`${currentUser}_`))
+                ? list.filter(store => (store.displayName || '').startsWith(`${currentUser}_`))
                 : list;
+
+            // Double check: if list is empty but we expected something, it might be the key doesn't have access
             setStores(userStores);
             console.log(`[App] Stores refreshed: ${userStores.length} stores found for user ${currentUser}`);
             setStatus(AppStatus.Manager);
@@ -224,6 +275,8 @@ const App: React.FC = () => {
                 try {
                     const authData = JSON.parse(savedAuth);
                     console.log('[App] Found saved auth:', authData);
+
+                    // 先登入用戶狀態
                     handleLogin(
                         authData.username,
                         authData.role,
@@ -231,20 +284,21 @@ const App: React.FC = () => {
                         authData.geminiApiKey || null
                     );
 
-                    // 如果沒有 API Key，嘗試自動登入
-                    if (!authData.geminiApiKey) {
-                        try {
-                            const autoLoggedIn = await attemptAutoLogin();
-                            if (!autoLoggedIn) {
-                                setStatus(AppStatus.Manager);
-                                setIsApiKeySelected(false);
-                            }
-                        } catch (e) {
-                            console.warn('[App] Auto-login failed', e);
-                            setStatus(AppStatus.Manager);
-                            setIsApiKeySelected(false);
-                        }
+                    // 如果用戶有保存的 API Key (在 gemini_key 而不是 auth_user 中)
+                    const savedGeminiKey = localStorage.getItem('gemini_api_key');
+                    if (savedGeminiKey && isValidApiKeyFormat(savedGeminiKey)) {
+                        geminiService.setApiKey(savedGeminiKey);
+                        setIsApiKeySelected(true);
+                    } else if (authData.geminiApiKey && isValidApiKeyFormat(authData.geminiApiKey)) {
+                        // Fallback to auth data key if valid
+                        geminiService.setApiKey(authData.geminiApiKey);
+                        setIsApiKeySelected(true);
+                    } else {
+                        // No valid key found
+                        setIsApiKeySelected(false);
+                        console.log('[App] No valid API key found for auto-login');
                     }
+
                     return;
                 } catch (e) {
                     console.warn('[App] Invalid saved auth', e);
@@ -256,7 +310,7 @@ const App: React.FC = () => {
             setStatus(AppStatus.Welcome);
         };
         init();
-    }, [attemptAutoLogin, handleLogin]);
+    }, [handleLogin]);
 
     const handleError = (message: string, err: any) => {
         console.error(message, err);
@@ -316,7 +370,7 @@ const App: React.FC = () => {
             const storeName = await geminiService.createRagStore(prefixedName);
             console.log(`[App] Space created: ${storeName}`);
             await refreshStores();
-            const newStore = { name: storeName, displayName: name };
+            const newStore = { name: storeName, displayName: prefixedName };
             handleSelectStore(newStore);
         } catch (err) {
             console.error('[App] Failed to create space:', err);
@@ -444,6 +498,10 @@ const App: React.FC = () => {
     };
 
     const renderContent = () => {
+        if (status === AppStatus.Initializing) {
+            return <div className="flex flex-col items-center justify-center h-screen"><Spinner /><p className="mt-4">Loading Knowledge Manager...</p></div>;
+        }
+
         // 如果顯示管理員面板
         if (showAdminPanel && userRole === 'admin') {
             return <AdminPage currentUsername={currentUser!} onBack={() => setShowAdminPanel(false)} />;
@@ -455,8 +513,6 @@ const App: React.FC = () => {
         }
 
         switch (status) {
-            case AppStatus.Initializing:
-                return <div className="flex flex-col items-center justify-center h-screen"><Spinner /><p className="mt-4">Loading Knowledge Manager...</p></div>;
             case AppStatus.Manager:
                 return (
                     <div>
@@ -506,7 +562,20 @@ const App: React.FC = () => {
                     <div className="flex h-full">
                         <div className="w-80 border-r border-gem-mist bg-gem-slate overflow-y-auto hidden md:block">
                             <div className="p-4 flex flex-col h-full">
-                                <button onClick={async () => { await refreshStores(); setStatus(AppStatus.Manager); }} className="mb-4 text-sm font-semibold text-gem-blue hover:underline">← Back to Manager</button>
+                                <button
+                                    onClick={async () => {
+                                        setIsLoadingSpaces(true);
+                                        try {
+                                            await refreshStores();
+                                        } finally {
+                                            setIsLoadingSpaces(false);
+                                            setStatus(AppStatus.Manager);
+                                        }
+                                    }}
+                                    className="mb-4 text-sm font-semibold text-gem-blue hover:underline"
+                                >
+                                    ← Back to Manager
+                                </button>
 
                                 {selectedStore && (
                                     <ApiInfo

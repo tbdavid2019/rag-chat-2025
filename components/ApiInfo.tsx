@@ -146,7 +146,21 @@ const ApiInfo: React.FC<ApiInfoProps> = ({ spaceName, displayName, username }) =
                     </div>
 
                     <div>
-                        <label className="block text-xs text-gray-600 mb-1">API Key</label>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-gray-600">API Key</label>
+                            <button
+                                onClick={() => {
+                                    if (confirm('Are you sure you want to regenerate the API key? The old key will stop working.')) {
+                                        setApiKey(null);
+                                        localStorage.removeItem(`api_key_${spaceName}`);
+                                        generateApiKey();
+                                    }
+                                }}
+                                className="text-xs text-red-500 hover:text-red-600 underline"
+                            >
+                                Regenerate Key
+                            </button>
+                        </div>
                         <div className="flex items-center gap-2">
                             <input
                                 type="password"

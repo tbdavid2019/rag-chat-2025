@@ -156,8 +156,25 @@ Express (3000)
    ```
    
    **注意**：
-   - Docker 使用生產模式，**只需要 3000 單一端口**（前端 + API）
    - 使用 `-v $(pwd)/data:/app/data` 掛載數據目錄，確保用戶數據持久化
+
+    > **重要：目錄權限設定**
+    > 由於容器是以非 root 用戶 (UID 1001) 運行，您必須確保宿主機目錄存在且權限正確：
+    > ```bash
+    > mkdir -p data
+    > sudo chown -R 1001:1001 data/
+    > ```
+    > 如果跳過此步驟，容器將無法寫入掛載的卷，導致重啟後數據丟失（如 API Key 消失）。
+
+321a. **運行容器（設定權限後）：**
+   ```bash
+   docker run -d \
+     -p 3000:3000 \
+     -v $(pwd)/data:/app/data \
+     --env-file .env \
+     --name rag-chat-2025 \
+     rag-chat-2025:latest
+   ```
 
 4. 查看日誌：
    ```bash
@@ -174,6 +191,11 @@ Express (3000)
    ```bash
    docker start rag-chat-2025
    ```
+
+7. 綜合
+```
+docker stop rag-chat-2025 && docker rm rag-chat-2025 && docker build -t rag-chat-2025:latest . && docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --env-file .env --name rag-chat-2025 rag-chat-2025:latest
+```
 
 ### 方式二：使用 Docker Compose（適合快速啟動）
 
@@ -222,6 +244,8 @@ Express (3000)
 2. 點擊側邊欄的「生成 API Key」按鈕
 3. 複製顯示的 Endpoint URL 和 API Key
 4. 在任何支援 OpenAI API 的工具中使用
+
+> **重新生成 Key (Regenerate)**：如果您需要撤銷舊的 Key，只需點擊 API Key 旁邊的「Regenerate Key」按鈕。這會立即讓舊 Key 失效並生成一個新的 Key。
 
 ### 重要概念
 
@@ -319,7 +343,25 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Wfv9mVFth8vC4qF2aXcYPS
    - Docker uses production mode, **only port 3000 needed** (Frontend + API)
    - Use `-v $(pwd)/data:/app/data` to mount data directory for persistence
 
-4. View logs:
+    > **Important: Directory Permissions**
+    > Since the container runs as a non-root user (UID 1001), you must ensure the host directory exists and has correct permissions:
+    > ```bash
+    > mkdir -p data
+    > sudo chown -R 1001:1001 data/
+    > ```
+    > If you skip this, the container effectively cannot write to the mapped volume, causing data loss on restart (e.g., API keys disappearing).
+
+321a. **Run container (with permissions set):**
+   ```bash
+   docker run -d \
+     -p 3000:3000 \
+     -v $(pwd)/data:/app/data \
+     --env-file .env \
+     --name rag-chat-2025 \
+     rag-chat-2025:latest
+   ```
+
+322: 4. View logs:
    ```bash
    docker logs -f rag-chat-2025
    ```
@@ -382,6 +424,8 @@ Each Knowledge Space can generate an OpenAI-compatible API endpoint:
 2. Click "生成 API Key" in the sidebar
 3. Copy the endpoint URL and API key
 4. Use it with any OpenAI-compatible tool
+
+> **Regenerate Key**: If you need to revoke an old key, click the "Regenerate Key" button next to your API Key. This will invalidate the old key immediately and generate a new one.
 
 ### Key Concept
 

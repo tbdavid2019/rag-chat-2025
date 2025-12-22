@@ -293,6 +293,12 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
     }
 });
 
+// 獲取 API Keys 列表（用於前端補充正確的 displayName）
+app.get('/api/spaces/list-with-keys', (req, res) => {
+    const apiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
+    res.json(apiKeys);
+});
+
 // ==== Space API ====
 
 // 更新用戶的 spaces 列表
