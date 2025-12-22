@@ -142,36 +142,37 @@ Express (3000)
 
 2. 建立 Docker 映像：
    ```bash
-   docker build -t gemini-rag-chat:latest .
+   docker build -t rag-chat-2025:latest .
    ```
 
 3. 運行容器：
    ```bash
    docker run -d \
      -p 3000:3000 \
-     -p 3002:3002 \
      -v $(pwd)/data:/app/data \
      --env-file .env \
-     --name gemini-rag-chat \
-     gemini-rag-chat:latest
+     --name rag-chat-2025 \
+     rag-chat-2025:latest
    ```
    
-   **注意**：使用 `-v $(pwd)/data:/app/data` 掛載數據目錄，確保用戶數據持久化
+   **注意**：
+   - Docker 使用生產模式，**只需要 3000 單一端口**（前端 + API）
+   - 使用 `-v $(pwd)/data:/app/data` 掛載數據目錄，確保用戶數據持久化
 
 4. 查看日誌：
    ```bash
-   docker logs -f gemini-rag-chat
+   docker logs -f rag-chat-2025
    ```
 
 5. 停止並移除容器：
    ```bash
-   docker stop gemini-rag-chat
-   docker rm gemini-rag-chat
+   docker stop rag-chat-2025
+   docker rm rag-chat-2025
    ```
 
 6. 重新啟動已存在的容器：
    ```bash
-   docker start gemini-rag-chat
+   docker start rag-chat-2025
    ```
 
 ### 方式二：使用 Docker Compose（適合快速啟動）
@@ -301,43 +302,37 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Wfv9mVFth8vC4qF2aXcYPS
 
 2. Build Docker image:
    ```bash
-   docker build -t gemini-rag-chat:latest .
+   docker build -t rag-chat-2025:latest .
    ```
 
 3. Run container:
    ```bash
    docker run -d \
      -p 3000:3000 \
-     -p 3002:3002 \
-     -e GEMINI_API_KEY=your-api-key-here \
-     --name gemini-rag-chat \
-     gemini-rag-chat:latest
+     -v $(pwd)/data:/app/data \
+     --env-file .env \
+     --name rag-chat-2025 \
+     rag-chat-2025:latest
    ```
    
-   Or use .env file:
-   ```bash
-   docker run -d \
-     -p 3000:3000 \
-     -p 3002:3002 \
-     --env-file .env \
-     --name gemini-rag-chat \
-     gemini-rag-chat:latest
-   ```
+   **Note**:
+   - Docker uses production mode, **only port 3000 needed** (Frontend + API)
+   - Use `-v $(pwd)/data:/app/data` to mount data directory for persistence
 
 4. View logs:
    ```bash
-   docker logs -f gemini-rag-chat
+   docker logs -f rag-chat-2025
    ```
 
 5. Stop and remove container:
    ```bash
-   docker stop gemini-rag-chat
-   docker rm gemini-rag-chat
+   docker stop rag-chat-2025
+   docker rm rag-chat-2025
    ```
 
 6. Restart existing container:
    ```bash
-   docker start gemini-rag-chat
+   docker start rag-chat-2025
    ```
 
 ### Method 2: Using Docker Compose (Quick start)

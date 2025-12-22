@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // 數據文件路徑
@@ -54,10 +54,10 @@ function writeJSONFile(filePath, data) {
 // 初始化管理員帳號
 function initializeAdmin() {
     const users = readJSONFile(USERS_FILE, { users: {} });
-    
+
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-    
+
     if (!users.users[adminUsername]) {
         // 管理員不存在，創建新的
         const hashedPassword = bcrypt.hashSync(adminPassword, 10);
@@ -74,7 +74,7 @@ function initializeAdmin() {
     } else {
         // 管理員已存在，檢查密碼是否變更
         const isPasswordMatch = bcrypt.compareSync(adminPassword, users.users[adminUsername].password);
-        
+
         if (!isPasswordMatch) {
             // .env 中的密碼已變更，更新哈希值
             console.log(`[Server] Admin password changed in .env, updating...`);
@@ -85,7 +85,7 @@ function initializeAdmin() {
             writeJSONFile(USERS_FILE, users);
             console.log(`[Server] Admin password updated successfully`);
         }
-        
+
         // 同步更新 Gemini API Key（如果 .env 有設定）
         if (process.env.GEMINI_API_KEY && users.users[adminUsername].geminiApiKey !== process.env.GEMINI_API_KEY) {
             users.users[adminUsername].geminiApiKey = process.env.GEMINI_API_KEY;
@@ -116,26 +116,26 @@ app.get('/health', (req, res) => {
 // 登入
 app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body;
-    
+
     if (!username || !password) {
         return res.status(400).json({ error: 'Missing username or password' });
     }
-    
+
     const users = readJSONFile(USERS_FILE, { users: {} });
     const user = users.users[username];
-    
+
     if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     const isValidPassword = bcrypt.compareSync(password, user.password);
-    
+
     if (!isValidPassword) {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     console.log(`[Server] User logged in: ${username}`);
-    
+
     res.json({
         username,
         role: user.role,
@@ -147,18 +147,18 @@ app.post('/api/auth/login', (req, res) => {
 // 獲取當前用戶信息
 app.get('/api/auth/me', (req, res) => {
     const username = req.headers['x-username'];
-    
+
     if (!username) {
         return res.status(401).json({ error: 'Not authenticated' });
     }
-    
+
     const users = readJSONFile(USERS_FILE, { users: {} });
     const user = users.users[username];
-    
+
     if (!user) {
         return res.status(404).json({ error: 'User not found' });
     }
-    
+
     res.json({
         username,
         role: user.role,
@@ -174,18 +174,18 @@ app.get('/api/admin/users', (req, res) => {
     const adminUsername = req.headers['x-username'];
     const users = readJSONFile(USERS_FILE, { users: {} });
     const admin = users.users[adminUsername];
-    
+
     if (!admin || admin.role !== 'admin') {
         return res.status(403).json({ error: 'Admin access required' });
     }
-    
+
     const userList = Object.entries(users.users).map(([username, data]) => ({
         username,
         role: data.role,
         spacesCount: (data.spaces || []).length,
         createdAt: data.createdAt
     }));
-    
+
     res.json({ users: userList });
 });
 
@@ -193,22 +193,22 @@ app.get('/api/admin/users', (req, res) => {
 app.post('/api/admin/users', (req, res) => {
     const adminUsername = req.headers['x-username'];
     const { username, password, role = 'user' } = req.body;
-    
+
     const users = readJSONFile(USERS_FILE, { users: {} });
     const admin = users.users[adminUsername];
-    
+
     if (!admin || admin.role !== 'admin') {
         return res.status(403).json({ error: 'Admin access required' });
     }
-    
+
     if (!username || !password) {
         return res.status(400).json({ error: 'Missing username or password' });
     }
-    
+
     if (users.users[username]) {
         return res.status(409).json({ error: 'User already exists' });
     }
-    
+
     const hashedPassword = bcrypt.hashSync(password, 10);
     users.users[username] = {
         password: hashedPassword,
@@ -218,10 +218,10 @@ app.post('/api/admin/users', (req, res) => {
         createdAt: new Date().toISOString()
     };
     users.lastModified = new Date().toISOString();
-    
+
     writeJSONFile(USERS_FILE, users);
     console.log(`[Server] User created by admin: ${username}`);
-    
+
     res.json({ message: 'User created successfully', username });
 });
 
@@ -229,28 +229,28 @@ app.post('/api/admin/users', (req, res) => {
 app.delete('/api/admin/users/:username', (req, res) => {
     const adminUsername = req.headers['x-username'];
     const { username } = req.params;
-    
+
     const users = readJSONFile(USERS_FILE, { users: {} });
     const admin = users.users[adminUsername];
-    
+
     if (!admin || admin.role !== 'admin') {
         return res.status(403).json({ error: 'Admin access required' });
     }
-    
+
     if (username === adminUsername) {
         return res.status(400).json({ error: 'Cannot delete your own account' });
     }
-    
+
     if (!users.users[username]) {
         return res.status(404).json({ error: 'User not found' });
     }
-    
+
     delete users.users[username];
     users.lastModified = new Date().toISOString();
-    
+
     writeJSONFile(USERS_FILE, users);
     console.log(`[Server] User deleted by admin: ${username}`);
-    
+
     res.json({ message: 'User deleted successfully' });
 });
 
@@ -259,23 +259,23 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
     const { username } = req.params;
     const { geminiApiKey } = req.body;
     const requestingUser = req.headers['x-username'];
-    
+
     const users = readJSONFile(USERS_FILE, { users: {} });
     const requester = users.users[requestingUser];
-    
+
     // 只允許用戶更新自己的 API Key，或管理員更新任何人的
     if (requestingUser !== username && (!requester || requester.role !== 'admin')) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    
+
     if (!users.users[username]) {
         return res.status(404).json({ error: 'User not found' });
     }
-    
+
     users.users[username].geminiApiKey = geminiApiKey;
     users.users[username].updatedAt = new Date().toISOString();
     users.lastModified = new Date().toISOString();
-    
+
     if (writeJSONFile(USERS_FILE, users)) {
         console.log(`[Server] Gemini API key updated for user: ${username}`);
         res.json({ message: 'Gemini API key saved successfully' });
@@ -290,19 +290,19 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 function updateUserSpaces(username, spaceName, action = 'add') {
     const users = readJSONFile(USERS_FILE, { users: {} });
     const user = users.users[username];
-    
+
     if (!user) return false;
-    
+
     if (!user.spaces) {
         user.spaces = [];
     }
-    
+
     if (action === 'add' && !user.spaces.includes(spaceName)) {
         user.spaces.push(spaceName);
     } else if (action === 'remove') {
         user.spaces = user.spaces.filter(s => s !== spaceName);
     }
-    
+
     users.lastModified = new Date().toISOString();
     return writeJSONFile(USERS_FILE, users);
 }
@@ -312,11 +312,11 @@ app.post('/api/spaces/:spaceName/generate-key', (req, res) => {
     const { spaceName } = req.params;
     const { displayName, geminiKey } = req.body;
     const username = req.headers['x-username'];
-    
+
     if (!spaceName || !geminiKey) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    
+
     const apiKey = `grag-${randomUUID()}`;
     const keyData = {
         spaceName,
@@ -325,18 +325,18 @@ app.post('/api/spaces/:spaceName/generate-key', (req, res) => {
         username: username || 'anonymous',
         createdAt: new Date().toISOString()
     };
-    
+
     apiKeyStore.set(apiKey, keyData);
-    
+
     // 保存到文件
     const apiKeysData = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
     apiKeysData.apiKeys[apiKey] = keyData;
     apiKeysData.lastModified = new Date().toISOString();
     writeJSONFile(API_KEYS_FILE, apiKeysData);
-    
+
     console.log(`[API Server] Generated API key for space: ${displayName} (user: ${username || 'anonymous'})`);
-    
-    res.json({ 
+
+    res.json({
         apiKey,
         endpoint: `http://localhost:${PORT}/v1/chat/completions`
     });
@@ -349,29 +349,29 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ error: { message: 'Invalid or missing API key', type: 'invalid_request_error' } });
         }
-        
+
         const apiKey = authHeader.replace('Bearer ', '');
         const spaceConfig = apiKeyStore.get(apiKey);
-        
+
         if (!spaceConfig) {
             return res.status(401).json({ error: { message: 'Invalid API key', type: 'invalid_request_error' } });
         }
-        
+
         const { messages, stream = false, model = 'gemini-2.5-flash', temperature, max_tokens } = req.body;
-        
+
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: { message: 'Invalid messages format', type: 'invalid_request_error' } });
         }
-        
+
         console.log(`[API Server] Processing request for space: ${spaceConfig.displayName}`);
-        
+
         // 初始化 Gemini
         const ai = new GoogleGenAI({ apiKey: spaceConfig.geminiKey });
-        
+
         // 將 OpenAI 格式的 messages 轉換為 Gemini 格式
         const lastMessage = messages[messages.length - 1];
         const query = lastMessage.content;
-        
+
         // 使用 File Search
         const response = await ai.models.generateContent({
             model: model,
@@ -386,9 +386,9 @@ app.post('/v1/chat/completions', async (req, res) => {
                 ]
             }
         });
-        
+
         const responseText = response.text || '';
-        
+
         // 返回 OpenAI 兼容格式
         const openaiResponse = {
             id: `chatcmpl-${randomUUID()}`,
@@ -411,17 +411,17 @@ app.post('/v1/chat/completions', async (req, res) => {
                 total_tokens: 0
             }
         };
-        
+
         console.log(`[API Server] Response sent for space: ${spaceConfig.displayName}`);
         res.json(openaiResponse);
-        
+
     } catch (error) {
         console.error('[API Server] Error:', error);
-        res.status(500).json({ 
-            error: { 
-                message: error.message || 'Internal server error', 
-                type: 'api_error' 
-            } 
+        res.status(500).json({
+            error: {
+                message: error.message || 'Internal server error',
+                type: 'api_error'
+            }
         });
     }
 });
@@ -429,17 +429,17 @@ app.post('/v1/chat/completions', async (req, res) => {
 // 獲取 space 的 API key
 app.get('/api/spaces/:spaceName/api-key', (req, res) => {
     const { spaceName } = req.params;
-    
+
     // 查找對應的 API key
     for (const [apiKey, config] of apiKeyStore.entries()) {
         if (config.spaceName === spaceName) {
-            return res.json({ 
+            return res.json({
                 apiKey,
                 endpoint: `http://localhost:${PORT}/v1/chat/completions`
             });
         }
     }
-    
+
     res.status(404).json({ error: 'API key not found for this space' });
 });
 
@@ -447,9 +447,14 @@ app.get('/api/spaces/:spaceName/api-key', (req, res) => {
 if (isProduction) {
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
-    
+
     // 所有非 API 路由返回 index.html（支援 SPA 路由）
-    app.get('*', (req, res) => {
+    app.use((req, res, next) => {
+        // 如果是 API 路由，跳過
+        if (req.path.startsWith('/api') || req.path.startsWith('/v1') || req.path === '/health') {
+            return next();
+        }
+        // 其他路由返回 index.html
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }

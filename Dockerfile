@@ -33,6 +33,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --chown=nodejs:nodejs . .
 
+# 創建 data 目錄並設定權限
+RUN mkdir -p /app/data && chown -R nodejs:nodejs /app/data
+
 # 切換到非 root 用戶
 USER nodejs
 
