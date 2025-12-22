@@ -217,41 +217,49 @@ const App: React.FC = () => {
         try {
             const list = await geminiService.listRagStores();
 
-            // 從後端獲取 API Keys 來補充正確的 displayName
-            // 因為 Gemini API 返回的 displayName 不可靠
+            // 從後端獲取當前用戶的 spaces（已按 username 過濾）
+            let userSpaceNames = new Set<string>();
+            const displayNameMap: Record<string, string> = {};
+
             try {
                 const response = await fetch('/api/spaces/list-with-keys', {
                     headers: currentUser ? { 'x-username': currentUser } : {}
                 });
                 if (response.ok) {
                     const apiKeysData = await response.json();
-                    console.log('[App] API Keys data:', apiKeysData);
+                    console.log('[App] API Keys data for current user:', apiKeysData);
 
-                    // 創建一個 spaceName -> displayName 的映射
-                    const displayNameMap: Record<string, string> = {};
+                    // 建立當前用戶的 spaceName 白名單和 displayName 映射
                     Object.values(apiKeysData.apiKeys || {}).forEach((keyData: any) => {
-                        if (keyData.spaceName && keyData.displayName) {
-                            displayNameMap[keyData.spaceName] = keyData.displayName;
-                        }
-                    });
-
-                    // 用後端的 displayName 覆蓋 Gemini 返回的
-                    list.forEach(store => {
-                        if (displayNameMap[store.name]) {
-                            store.displayName = displayNameMap[store.name];
+                        if (keyData.spaceName) {
+                            userSpaceNames.add(keyData.spaceName);
+                            if (keyData.displayName) {
+                                displayNameMap[keyData.spaceName] = keyData.displayName;
+                            }
                         }
                     });
                 }
             } catch (e) {
-                console.warn('[App] Failed to fetch API keys for displayName mapping:', e);
+                console.warn('[App] Failed to fetch API keys for user filtering:', e);
             }
 
-            // 數據隔離：只顯示屬於當前用戶的 spaces
-            // Admin users might see all, but currently implementation implies admin also needs a key
-            // For now, adhere to "only see own spaces" unless explicitly changed for admin
-            const userStores = currentUser
-                ? list.filter(store => (store.displayName || '').startsWith(`${currentUser}_`))
-                : list;
+            // 數據隔離：只顯示屬於當前用戶的 spaces（基於 api-keys.json 中的 username）
+            console.log('[App] Current user:', currentUser);
+            console.log('[App] User space names whitelist:', Array.from(userSpaceNames));
+            console.log('[App] Total spaces from Gemini:', list.length);
+
+            // 永遠使用白名單過濾，即使 currentUser 為 null
+            // 如果白名單為空，則不顯示任何 spaces
+            const userStores = list.filter(store => userSpaceNames.has(store.name));
+
+            console.log('[App] Filtered user stores:', userStores.length);
+
+            // 用後端的 displayName 覆蓋 Gemini 返回的
+            userStores.forEach(store => {
+                if (displayNameMap[store.name]) {
+                    store.displayName = displayNameMap[store.name];
+                }
+            });
 
             // Double check: if list is empty but we expected something, it might be the key doesn't have access
             setStores(userStores);

@@ -188,10 +188,21 @@ app.get('/api/admin/users', (req, res) => {
         return res.status(403).json({ error: 'Admin access required' });
     }
 
+    // 從 api-keys.json 計算每個用戶的 spaces 數量
+    const apiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
+    const userSpacesCount = {};
+
+    Object.values(apiKeys.apiKeys || {}).forEach((keyData) => {
+        const username = keyData.username;
+        if (username) {
+            userSpacesCount[username] = (userSpacesCount[username] || 0) + 1;
+        }
+    });
+
     const userList = Object.entries(users.users).map(([username, data]) => ({
         username,
         role: data.role,
-        spacesCount: (data.spaces || []).length,
+        spacesCount: userSpacesCount[username] || 0,
         createdAt: data.createdAt
     }));
 
@@ -328,8 +339,21 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 
 // 獲取 API Keys 列表（用於前端補充正確的 displayName）
 app.get('/api/spaces/list-with-keys', (req, res) => {
-    const apiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
-    res.json(apiKeys);
+    const requestingUser = req.headers['x-username'];
+    const allApiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
+
+    // 只返回當前用戶的 API Keys
+    const userApiKeys = {};
+    Object.entries(allApiKeys.apiKeys || {}).forEach(([keyId, keyData]) => {
+        if (keyData.username === requestingUser) {
+            userApiKeys[keyId] = keyData;
+        }
+    });
+
+    res.json({
+        apiKeys: userApiKeys,
+        lastModified: allApiKeys.lastModified
+    });
 });
 
 // ==== Space API ====
