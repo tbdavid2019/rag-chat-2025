@@ -128,7 +128,52 @@ Express (3000)
 
 ## Docker 部署
 
-### 方式一：使用 Docker Build（推薦給習慣命令行的用戶）
+### 方式一：從 Docker Hub 拉取（最簡單，推薦）
+
+1. 創建 `.env` 檔案並設定環境變數：
+   ```bash
+   cp .env.example .env
+   ```
+   
+   編輯 `.env` 設定：
+   - `GEMINI_API_KEY`：你的 Gemini API Key
+   - `ADMIN_USERNAME`：管理員帳號（預設：admin）
+   - `ADMIN_PASSWORD`：管理員密碼（預設：admin123）
+
+2. 準備數據目錄（重要）：
+   ```bash
+   mkdir -p data
+   sudo chown -R 1001:1001 data/
+   ```
+
+3. 拉取並運行容器：
+   ```bash
+   docker pull tbdavid2019/333ragchat:latest
+   docker run -d \
+     -p 3000:3000 \
+     -v $(pwd)/data:/app/data \
+     --env-file .env \
+     --name rag-chat-2025 \
+     tbdavid2019/333ragchat:latest
+   ```
+
+4. 查看日誌：
+   ```bash
+   docker logs -f rag-chat-2025
+   ```
+
+5. 停止並移除容器：
+   ```bash
+   docker stop rag-chat-2025
+   docker rm rag-chat-2025
+   ```
+
+6. 重新啟動已存在的容器：
+   ```bash
+   docker start rag-chat-2025
+   ```
+
+### 方式二：使用 Docker Build（適合開發者）
 
 1. 創建 `.env` 檔案並設定環境變數：
    ```bash
@@ -196,6 +241,11 @@ Express (3000)
 ```
 docker stop rag-chat-2025 && docker rm rag-chat-2025 && docker build -t rag-chat-2025:latest . && docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --env-file .env --name rag-chat-2025 rag-chat-2025:latest
 ```
+```
+docker tag rag-chat-2025:latest tbdavid2019/333ragchat:latest
+docker push tbdavid2019/333ragchat:latest
+```
+
 
 ### 方式二：使用 Docker Compose（適合快速啟動）
 
@@ -316,7 +366,48 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Wfv9mVFth8vC4qF2aXcYPS
 
 ## Docker Deployment
 
-### Method 1: Using Docker Build (Recommended for CLI users)
+### Method 1: Pull from Docker Hub (Easiest, Recommended)
+
+1. Create `.env` file and set your API key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your GEMINI_API_KEY, ADMIN_USERNAME, ADMIN_PASSWORD
+   ```
+
+2. Prepare data directory (Important):
+   ```bash
+   mkdir -p data
+   sudo chown -R 1001:1001 data/
+   ```
+
+3. Pull and run container:
+   ```bash
+   docker pull tbdavid2019/333ragchat:latest
+   docker run -d \
+     -p 3000:3000 \
+     -v $(pwd)/data:/app/data \
+     --env-file .env \
+     --name rag-chat-2025 \
+     tbdavid2019/333ragchat:latest
+   ```
+
+4. View logs:
+   ```bash
+   docker logs -f rag-chat-2025
+   ```
+
+5. Stop and remove container:
+   ```bash
+   docker stop rag-chat-2025
+   docker rm rag-chat-2025
+   ```
+
+6. Restart existing container:
+   ```bash
+   docker start rag-chat-2025
+   ```
+
+### Method 2: Using Docker Build (For Developers)
 
 1. Create `.env` file and set your API key:
    ```bash
