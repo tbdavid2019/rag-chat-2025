@@ -40,7 +40,7 @@ RUN mkdir -p /app/data && chown -R nodejs:nodejs /app/data
 USER nodejs
 
 # 暴露端口（只需要 3000）
-EXPOSE 3000
+EXPOSE 3005
 
 # 設定環境變數
 ENV NODE_ENV=production
