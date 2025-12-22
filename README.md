@@ -36,14 +36,20 @@
    - `ADMIN_USERNAME`：管理員帳號（預設：admin）
    - `ADMIN_PASSWORD`：管理員密碼（預設：admin123）
 
-3. 啟動應用程式（同時啟動前端和 API 伺服器）：
+3. 啟動應用程式：
+   
+   **開發環境**（前端 Vite + 後端 Express，雙端口）：
+   ```bash
+   npm run dev
+   ```
+   - 前端：http://localhost:3000（自動代理 API 請求到 3002）
+   - 後端：http://localhost:3002
+   
+   **生產環境**（單一 Express 服務器，單端口）：
    ```bash
    npm start
    ```
-   
-   或分別啟動：
-   - 僅前端：`npm run dev`
-   - 僅 API 伺服器：`npm run server`
+   - 統一端口：http://localhost:3000（前端 + API）
 
 4. 首次登入：
    - 開啟瀏覽器訪問 `http://localhost:3000`
@@ -268,14 +274,20 @@ View your app in AI Studio: https://ai.studio/apps/drive/1Wfv9mVFth8vC4qF2aXcYPS
    # Edit .env and add your GEMINI_API_KEY
    ```
 
-3. Run the app (both frontend and API server):
+3. Run the app:
+   
+   **Development** (Vite + Express, dual ports):
+   ```bash
+   npm run dev
+   ```
+   - Frontend: http://localhost:3000 (auto-proxies API to 3002)
+   - Backend: http://localhost:3002
+   
+   **Production** (Single Express server, single port):
    ```bash
    npm start
    ```
-   
-   Or run separately:
-   - Frontend only: `npm run dev`
-   - API Server only: `npm run server`
+   - Unified port: http://localhost:3000 (Frontend + API)
 
 ## Docker Deployment
 
