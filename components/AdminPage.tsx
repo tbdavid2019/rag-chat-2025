@@ -105,6 +105,40 @@ const AdminPage: React.FC<AdminPageProps> = ({ currentUsername, onBack }) => {
         }
     };
 
+    const handleResetPassword = async (username: string) => {
+        const newPassword = prompt(`請輸入 "${username}" 的新密碼：`);
+        if (!newPassword || newPassword.trim() === '') {
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            alert('密碼長度至少需要 6 個字符');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/admin/users/${username}/reset-password`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-username': currentUsername
+                },
+                body: JSON.stringify({ newPassword })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to reset password');
+            }
+
+            console.log('[Admin] Password reset successfully');
+            alert(`用戶 "${username}" 的密碼已成功重設`);
+        } catch (err: any) {
+            console.error('[Admin] Reset password error:', err);
+            alert(err.message || '重設密碼失敗');
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
@@ -201,11 +235,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ currentUsername, onBack }) => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 text-sm">
-                                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                                    user.role === 'admin' 
-                                                        ? 'bg-purple-100 text-purple-700' 
-                                                        : 'bg-gray-100 text-gray-700'
-                                                }`}>
+                                                <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'admin'
+                                                    ? 'bg-purple-100 text-purple-700'
+                                                    : 'bg-gray-100 text-gray-700'
+                                                    }`}>
                                                     {user.role === 'admin' ? '管理員' : '普通用戶'}
                                                 </span>
                                             </td>
@@ -215,12 +248,20 @@ const AdminPage: React.FC<AdminPageProps> = ({ currentUsername, onBack }) => {
                                             </td>
                                             <td className="px-4 py-3 text-sm">
                                                 {user.username !== currentUsername && (
-                                                    <button
-                                                        onClick={() => handleDeleteUser(user.username)}
-                                                        className="text-red-600 hover:text-red-800"
-                                                    >
-                                                        刪除
-                                                    </button>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleResetPassword(user.username)}
+                                                            className="text-blue-600 hover:text-blue-800"
+                                                        >
+                                                            重設密碼
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteUser(user.username)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            刪除
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </td>
                                         </tr>

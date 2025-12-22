@@ -263,6 +263,39 @@ app.delete('/api/admin/users/:username', (req, res) => {
     res.json({ message: 'User deleted successfully' });
 });
 
+// 重設用戶密碼（僅管理員）
+app.put('/api/admin/users/:username/reset-password', (req, res) => {
+    const adminUsername = req.headers['x-username'];
+    const { username } = req.params;
+    const { newPassword } = req.body;
+
+    const users = readJSONFile(USERS_FILE, { users: {} });
+    const admin = users.users[adminUsername];
+
+    if (!admin || admin.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    if (!users.users[username]) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // 更新密碼
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+    users.users[username].password = hashedPassword;
+    users.users[username].updatedAt = new Date().toISOString();
+    users.lastModified = new Date().toISOString();
+
+    writeJSONFile(USERS_FILE, users);
+    console.log(`[Server] Password reset by admin for user: ${username}`);
+
+    res.json({ message: 'Password reset successfully' });
+});
+
 // 更新用戶的 Gemini API Key
 app.put('/api/users/:username/gemini-key', (req, res) => {
     const { username } = req.params;
