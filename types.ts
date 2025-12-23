@@ -8,11 +8,18 @@ export interface RagStore {
     displayName: string;
 }
 
+export interface SpaceConfig {
+    systemInstruction?: string;
+    model?: string;
+    usageCount?: number;
+    lastActive?: string;
+}
+
 export interface CustomMetadata {
-  key?: string;
-  stringValue?: string;
-  stringListValue?: string[];
-  numericValue?: number;
+    key?: string;
+    stringValue?: string;
+    stringListValue?: string[];
+    numericValue?: number;
 }
 
 export interface Document {

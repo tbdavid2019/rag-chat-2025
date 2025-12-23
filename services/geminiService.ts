@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { RagStore, Document, QueryResult } from '../types';
+import { RagStore, Document, QueryResult, SpaceConfig } from '../types';
 
 let ai: GoogleGenAI;
 let customApiKey: string | null = null;
@@ -102,14 +102,27 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
     console.log(`[GeminiService] File uploaded successfully: ${file.name}`);
 }
 
-export async function fileSearch(ragStoreName: string, query: string): Promise<QueryResult> {
+// Default config values
+export const DEFAULT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_SYSTEM_INSTRUCTION = "DO NOT ASK THE USER TO READ THE MANUAL. Provide a direct answer based on the provided context. Pinpoint the relevant sections.";
+
+export async function fileSearch(ragStoreName: string, query: string, config?: SpaceConfig): Promise<QueryResult> {
     checkInitialized();
     console.log(`[GeminiService] Performing file search in store: ${ragStoreName}`);
     console.log(`[GeminiService] Query: ${query}`);
+    console.log(`[GeminiService] Query: ${query}`);
+
+    // Default config if not provided
+    const model = (config?.model) || DEFAULT_MODEL;
+    const systemInstruction = config?.systemInstruction || DEFAULT_SYSTEM_INSTRUCTION;
+
+    console.log(`[GeminiService] Using model: ${model}`);
+
     const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: query + "\n\nDO NOT ASK THE USER TO READ THE MANUAL. Provide a direct answer based on the provided context. Pinpoint the relevant sections.",
+        model: model,
+        contents: query,
         config: {
+            systemInstruction: systemInstruction,
             tools: [
                 {
                     fileSearch: {
@@ -126,6 +139,14 @@ export async function fileSearch(ragStoreName: string, query: string): Promise<Q
         text: response.text,
         groundingChunks: groundingChunks,
     };
+}
+
+export async function updateUsageStats(ragStoreName: string): Promise<void> {
+    try {
+        await fetch(`/api/spaces/${ragStoreName}/stats/increment`, { method: 'POST' });
+    } catch (e) {
+        console.error('[GeminiService] Failed to update usage stats', e);
+    }
 }
 
 export async function generateExampleQuestions(ragStoreName: string): Promise<string[]> {

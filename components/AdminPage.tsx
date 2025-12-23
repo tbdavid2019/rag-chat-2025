@@ -5,6 +5,7 @@ interface User {
     role: string;
     spacesCount: number;
     createdAt: string;
+    totalUsage?: number;
 }
 
 interface AdminPageProps {
@@ -219,6 +220,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ currentUsername, onBack }) => {
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">用戶名</th>
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">角色</th>
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">知識空間數量</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">總調用次數</th>
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">創建時間</th>
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">操作</th>
                                     </tr>
@@ -243,6 +245,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ currentUsername, onBack }) => {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-600">{user.spacesCount}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 font-mono">{user.totalUsage || 0}</td>
                                             <td className="px-4 py-3 text-sm text-gray-600">
                                                 {new Date(user.createdAt).toLocaleString('zh-TW')}
                                             </td>

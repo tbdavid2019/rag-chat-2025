@@ -22,6 +22,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const DATA_DIR = path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const API_KEYS_FILE = path.join(DATA_DIR, 'api-keys.json');
+const SPACES_CONFIG_FILE = path.join(DATA_DIR, 'spaces-config.json');
 
 // 確保 data 目錄存在
 if (!fs.existsSync(DATA_DIR)) {
@@ -199,12 +200,30 @@ app.get('/api/admin/users', (req, res) => {
         }
     });
 
-    const userList = Object.entries(users.users).map(([username, data]) => ({
-        username,
-        role: data.role,
-        spacesCount: userSpacesCount[username] || 0,
-        createdAt: data.createdAt
-    }));
+    const userList = Object.entries(users.users).map(([username, data]) => {
+        // Calculate total usage for this user across all their spaces
+        let totalUsage = 0;
+        const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+
+        if (data.spaces && Array.isArray(data.spaces)) {
+            data.spaces.forEach(spaceName => {
+                const prefixedSpaceName = `${username}_${spaceName}`;
+                // Also check without prefix just in case, but usually it has prefix
+                const config = spacesConfig.configs[prefixedSpaceName] || spacesConfig.configs[spaceName];
+                if (config && config.usageCount) {
+                    totalUsage += config.usageCount;
+                }
+            });
+        }
+
+        return {
+            username,
+            role: data.role,
+            spacesCount: (data.spaces || []).length,
+            createdAt: data.createdAt,
+            totalUsage
+        };
+    });
 
     res.json({ users: userList });
 });
@@ -373,6 +392,14 @@ function updateUserSpaces(username, spaceName, action = 'add') {
         user.spaces.push(spaceName);
     } else if (action === 'remove') {
         user.spaces = user.spaces.filter(s => s !== spaceName);
+
+        // Also cleanup config when deleting space
+        const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+        const prefixedName = `${username}_${spaceName}`;
+        if (spacesConfig.configs[prefixedName]) {
+            delete spacesConfig.configs[prefixedName];
+            writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
+        }
     }
 
     users.lastModified = new Date().toISOString();
@@ -461,6 +488,19 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         const responseText = response.text || '';
 
+        // Increment usage stats for this space
+        const spaceName = spaceConfig.spaceName;
+        const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+
+        if (!spacesConfig.configs[spaceName]) {
+            spacesConfig.configs[spaceName] = {};
+        }
+
+        spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
+        spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
+        spacesConfig.lastModified = new Date().toISOString();
+        writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
+
         // 返回 OpenAI 兼容格式
         const openaiResponse = {
             id: `chatcmpl-${randomUUID()}`,
@@ -513,6 +553,58 @@ app.get('/api/spaces/:spaceName/api-key', (req, res) => {
     }
 
     res.status(404).json({ error: 'API key not found for this space' });
+});
+
+// ==== Space Configuration & Stats API ====
+
+// Get space config
+app.get('/api/spaces/:spaceName/config', (req, res) => {
+    const { spaceName } = req.params;
+    const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+    const config = spacesConfig.configs[spaceName] || {
+        usageCount: 0,
+        model: 'gemini-2.5-flash',
+        systemInstruction: ''
+    };
+    res.json(config);
+});
+
+// Update space config
+app.put('/api/spaces/:spaceName/config', (req, res) => {
+    const { spaceName } = req.params;
+    const { model, systemInstruction } = req.body;
+
+    const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+
+    if (!spacesConfig.configs[spaceName]) {
+        spacesConfig.configs[spaceName] = {};
+    }
+
+    if (model !== undefined) spacesConfig.configs[spaceName].model = model;
+    if (systemInstruction !== undefined) spacesConfig.configs[spaceName].systemInstruction = systemInstruction;
+
+    spacesConfig.lastModified = new Date().toISOString();
+    writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
+
+    res.json({ message: 'Configuration saved', config: spacesConfig.configs[spaceName] });
+});
+
+// Increment usage stats (called by frontend)
+app.post('/api/spaces/:spaceName/stats/increment', (req, res) => {
+    const { spaceName } = req.params;
+
+    const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+
+    if (!spacesConfig.configs[spaceName]) {
+        spacesConfig.configs[spaceName] = {};
+    }
+
+    spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
+    spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
+    spacesConfig.lastModified = new Date().toISOString();
+    writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
+
+    res.json({ message: 'Stats incremented', usageCount: spacesConfig.configs[spaceName].usageCount });
 });
 
 // 生產環境：提供前端靜態文件

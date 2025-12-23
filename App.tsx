@@ -5,7 +5,7 @@
 */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppStatus, ChatMessage, RagStore, Document } from './types';
+import { AppStatus, ChatMessage, RagStore, Document, SpaceConfig } from './types';
 import * as geminiService from './services/geminiService';
 import Spinner from './components/Spinner';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -15,6 +15,7 @@ import DocumentList from './components/DocumentList';
 import ApiInfo from './components/ApiInfo';
 import LoginPage from './components/LoginPage';
 import AdminPage from './components/AdminPage';
+import SpaceSettingsModal from './components/SpaceSettingsModal';
 
 declare global {
     interface AIStudio {
@@ -59,6 +60,10 @@ const App: React.FC = () => {
     const [isQueryLoading, setIsQueryLoading] = useState(false);
     const [exampleQuestions, setExampleQuestions] = useState<string[]>([]);
     const [isLoadingSpaces, setIsLoadingSpaces] = useState(false);
+
+    // Space Settings State
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+    const [currentSpaceConfig, setCurrentSpaceConfig] = useState<SpaceConfig>({});
 
     const loadHistory = (storeName: string) => {
         const saved = localStorage.getItem(`rag_history_${storeName}`);
@@ -432,9 +437,39 @@ const App: React.FC = () => {
             const questions = await geminiService.generateExampleQuestions(store.name);
             setExampleQuestions(questions);
             console.log('[App] Generated example questions:', questions);
+
+            // Fetch Space Config
+            try {
+                const configRes = await fetch(`/api/spaces/${store.name}/config`);
+                if (configRes.ok) {
+                    const config = await configRes.json();
+                    setCurrentSpaceConfig(config);
+                } else {
+                    setCurrentSpaceConfig({});
+                }
+            } catch (e) {
+                console.warn('[App] Failed to fetch space config', e);
+                setCurrentSpaceConfig({});
+            }
         } catch (err) {
             console.error("[App] Failed to load store details", err);
             handleApiError(err, "Loading Space Details");
+        }
+    };
+
+    const handleSaveSpaceConfig = async (newConfig: SpaceConfig) => {
+        if (!selectedStore) return;
+        try {
+            await fetch(`/api/spaces/${selectedStore.name}/config`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newConfig)
+            });
+            setCurrentSpaceConfig(prev => ({ ...prev, ...newConfig }));
+            console.log('[App] Space config saved');
+        } catch (e) {
+            console.error('[App] Failed to save space config', e);
+            throw e;
         }
     };
 
@@ -472,23 +507,6 @@ const App: React.FC = () => {
         setIsQueryLoading(true);
 
         try {
-            const result = await geminiService.fileSearch(selectedStore.name, message);
-            console.log('[App] Received response from Gemini');
-            const modelMsg: ChatMessage = {
-                role: 'model',
-                parts: [{ text: result.text }],
-                groundingChunks: result.groundingChunks
-            };
-            const updatedHistory = [...newHistory, modelMsg];
-            setChatHistory(updatedHistory);
-            saveHistory(selectedStore.name, updatedHistory);
-        } catch (err) {
-            console.error('[App] Failed to get response:', err);
-            const errorMsg: ChatMessage = {
-                role: 'model',
-                parts: [{ text: "Error fetching response. Please check your connection or API key." }]
-            };
-            setChatHistory(prev => [...prev, errorMsg]);
         } finally {
             setIsQueryLoading(false);
         }
@@ -586,11 +604,21 @@ const App: React.FC = () => {
                                 </button>
 
                                 {selectedStore && (
-                                    <ApiInfo
-                                        spaceName={selectedStore.name}
-                                        displayName={selectedStore.displayName}
-                                        username={currentUser || undefined}
-                                    />
+                                    <>
+                                        <div className="mb-4">
+                                            <ApiInfo
+                                                spaceName={selectedStore.name}
+                                                displayName={selectedStore.displayName}
+                                                username={currentUser || undefined}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => setIsSettingsModalOpen(true)}
+                                            className="w-full mb-4 px-3 py-2 bg-gem-onyx border border-gem-mist text-gem-blue rounded hover:bg-gem-mist/20 text-sm flex items-center justify-center gap-2"
+                                        >
+                                            <span>⚙️</span> Space Settings
+                                        </button>
+                                    </>
                                 )}
                                 <DocumentList
                                     selectedStore={selectedStore}
@@ -642,7 +670,21 @@ const App: React.FC = () => {
         }
     };
 
-    return <main className="h-screen bg-gem-onyx text-gem-offwhite">{renderContent()}</main>;
+    return (
+        <main className="h-screen bg-gem-onyx text-gem-offwhite">
+            {renderContent()}
+            {selectedStore && (
+                <SpaceSettingsModal
+                    isOpen={isSettingsModalOpen}
+                    onClose={() => setIsSettingsModalOpen(false)}
+                    spaceName={selectedStore.name}
+                    displayName={selectedStore.displayName}
+                    initialConfig={currentSpaceConfig}
+                    onSave={handleSaveSpaceConfig}
+                />
+            )}
+        </main>
+    );
 };
 
 export default App;
