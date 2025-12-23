@@ -363,6 +363,13 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 
     users.users[username].geminiApiKey = geminiApiKey;
     users.users[username].updatedAt = new Date().toISOString();
+    
+    // 如果清除 API Key，也清空 spaces 陣列
+    if (!geminiApiKey || geminiApiKey === null) {
+        console.log(`[Server] Clearing spaces for user ${username} due to API key removal`);
+        users.users[username].spaces = [];
+    }
+    
     users.lastModified = new Date().toISOString();
 
     if (writeJSONFile(USERS_FILE, users)) {
@@ -399,7 +406,9 @@ app.get('/api/spaces/list-with-keys', (req, res) => {
 // ==== Space API ====
 
 // 同步本地 JSON 與 Gemini File Search API（以 Gemini 為準）
-app.console.log(`[Sync] Syncing spaces for user: ${username}`);
+app.post('/api/spaces/sync', async (req, res) => {
+    const { username, geminiSpaces } = req.body;
+    console.log(`[Sync] Syncing spaces for user: ${username}`);
 
     if (!username) {
         console.log('[Sync] ✗ Not authenticated');
@@ -462,11 +471,7 @@ app.console.log(`[Sync] Syncing spaces for user: ${username}`);
             spaces: shortSpaceNames
         });
     } catch (error) {
-        console.error('[Sync] ✗Spaces.length,
-            spaces: shortSpaceNames
-        });
-    } catch (error) {
-        console.error('[Server] Error syncing spaces:', error);
+        console.error('[Sync] ✗ Error syncing spaces:', error);
         res.status(500).json({ error: 'Failed to sync spaces' });
     }
 });
@@ -660,7 +665,10 @@ app.get('/api/spaces/:spaceName/api-key', (req, res) => {
     res.status(404).json({ error: 'API key not found for this space' });
 });
 
-// ==== Spusername = req.headers['x-username'];
+// ==== Space Config API ====
+app.get('/api/spaces/:spaceName/config', (req, res) => {
+    const { spaceName } = req.params;
+    const username = req.headers['x-username'];
     console.log(`[Config] Get config for space: ${spaceName} (user: ${username})`);
     
     const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
@@ -670,12 +678,8 @@ app.get('/api/spaces/:spaceName/api-key', (req, res) => {
         systemInstruction: ''
     };
     
-    console.log(`[Config] Config retrieved: usageCount=${config.usageCount}, model=${config.model}`)onst spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
-    const config = spacesConfig.configs[spaceName] || {
-        usageCount: 0,
-        model: 'gemini-2.5-flash',
-        systemInstruction: ''
-    };
+    console.log(`[Config] Config retrieved: usageCount=${config.usageCount}, model=${config.model}`);
+    
     res.json(config);
 });
 
@@ -697,6 +701,11 @@ app.put('/api/spaces/:spaceName/config', (req, res) => {
     writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
 
     res.json({ message: 'Configuration saved', config: spacesConfig.configs[spaceName] });
+});
+
+// Increment usage count
+app.post('/api/spaces/:spaceName/stats/increment', (req, res) => {
+    const { spaceName } = req.params;
     const username = req.headers['x-username'];
     console.log(`[Stats] Increment usage for space: ${spaceName} (user: ${username})`);
 
@@ -706,16 +715,7 @@ app.put('/api/spaces/:spaceName/config', (req, res) => {
         spacesConfig.configs[spaceName] = {};
     }
 
-    spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
-    spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
-    spacesConfig.lastModified = new Date().toISOString();
-    writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
-
     console.log(`[Stats] ✓ Usage count: ${spacesConfig.configs[spaceName].usageCount}`);
-    spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
-    spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
-    spacesConfig.lastModified = new Date().toISOString();
-    writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
 
     res.json({ message: 'Stats incremented', usageCount: spacesConfig.configs[spaceName].usageCount });
 });
