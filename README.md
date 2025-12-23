@@ -1,10 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
 # 333 RAG 知識庫聊天系統
 
 基於 Gemini File Search API 打造的智能知識庫管理與對話系統，支援多用戶認證、數據隔離與完整日誌追蹤。
+
+
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+
 
 ## 功能特色
 
