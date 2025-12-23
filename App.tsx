@@ -96,8 +96,8 @@ const App: React.FC = () => {
             localStorage.setItem('gemini_api_key', geminiApiKey);
             setIsApiKeySelected(true);
             setStatus(AppStatus.Manager);
-            // 刷新 stores
-            setTimeout(() => refreshStores(), 100);
+            // 刷新 stores - 傳入 username 因為 state 還沒更新
+            setTimeout(() => refreshStores(username), 100);
         } else {
             setStatus(AppStatus.Manager);
         }
@@ -206,11 +206,12 @@ const App: React.FC = () => {
         setStatus(AppStatus.Welcome); // Redirect to login page
     };
 
-    const refreshStores = async () => {
-        console.log('[App] Refreshing stores list...');
+    const refreshStores = async (usernameOverride?: string) => {
+        // 使用傳入的 username 或當前的 currentUser
+        const effectiveUsername = usernameOverride || currentUser;
+        console.log('[App] Refreshing stores list for user:', effectiveUsername);
+        
         // 如果沒有選中 API Key，不應該嘗試獲取 store
-        // 除非是 admin 正在查看所有 store (但這裡 admin 也應該有自己的 key)
-        // 為了安全，如果沒有 setIsApiKeySelected(true)，我們清空 stores
         if (!isApiKeySelected && !localStorage.getItem('gemini_api_key')) {
             console.log('[App] No API key selected, clearing stores.');
             setStores([]);
@@ -220,55 +221,67 @@ const App: React.FC = () => {
         setIsLoadingSpaces(true);
         setApiKeyError(null);
         try {
+            // 1. 從 Gemini File Search API 獲取真實的 spaces 列表（這是真相來源）
             const list = await geminiService.listRagStores();
+            console.log('[App] Total spaces from Gemini File Search API:', list.length);
+            console.log('[App] Gemini spaces:', list.map(s => s.name));
 
-            // 從後端獲取當前用戶的 spaces（已按 username 過濾）
-            let userSpaceNames = new Set<string>();
+            // 2. 從後端獲取當前用戶的 API keys 和 displayName 映射
             const displayNameMap: Record<string, string> = {};
+            let existingApiKeys: Record<string, any> = {};
 
             try {
                 const response = await fetch('/api/spaces/list-with-keys', {
-                    headers: currentUser ? { 'x-username': currentUser } : {}
+                    headers: effectiveUsername ? { 'x-username': effectiveUsername } : {}
                 });
                 if (response.ok) {
                     const apiKeysData = await response.json();
-                    console.log('[App] API Keys data for current user:', apiKeysData);
+                    console.log('[App] Existing API Keys for current user:', Object.keys(apiKeysData.apiKeys || {}).length);
+                    existingApiKeys = apiKeysData.apiKeys || {};
 
-                    // 建立當前用戶的 spaceName 白名單和 displayName 映射
-                    Object.values(apiKeysData.apiKeys || {}).forEach((keyData: any) => {
-                        if (keyData.spaceName) {
-                            userSpaceNames.add(keyData.spaceName);
-                            if (keyData.displayName) {
-                                displayNameMap[keyData.spaceName] = keyData.displayName;
-                            }
+                    // 建立 displayName 映射
+                    Object.values(existingApiKeys).forEach((keyData: any) => {
+                        if (keyData.spaceName && keyData.displayName) {
+                            displayNameMap[keyData.spaceName] = keyData.displayName;
                         }
                     });
                 }
             } catch (e) {
-                console.warn('[App] Failed to fetch API keys for user filtering:', e);
+                console.warn('[App] Failed to fetch API keys:', e);
             }
 
-            // 數據隔離：只顯示屬於當前用戶的 spaces（基於 api-keys.json 中的 username）
-            console.log('[App] Current user:', currentUser);
-            console.log('[App] User space names whitelist:', Array.from(userSpaceNames));
-            console.log('[App] Total spaces from Gemini:', list.length);
+            // 3. 同步本地 JSON：以 Gemini API 為準
+            if (effectiveUsername) {
+                try {
+                    const geminiSpaceNames = new Set(list.map(s => s.name));
+                    
+                    // 同步到後端：更新 users.json 和清理 api-keys.json
+                    await fetch('/api/spaces/sync', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-username': effectiveUsername
+                        },
+                        body: JSON.stringify({
+                            geminiSpaces: Array.from(geminiSpaceNames)
+                        })
+                    });
+                    console.log('[App] Local JSON synced with Gemini API');
+                } catch (e) {
+                    console.warn('[App] Failed to sync local JSON:', e);
+                }
+            }
 
-            // 永遠使用白名單過濾，即使 currentUser 為 null
-            // 如果白名單為空，則不顯示任何 spaces
-            const userStores = list.filter(store => userSpaceNames.has(store.name));
-
-            console.log('[App] Filtered user stores:', userStores.length);
-
-            // 用後端的 displayName 覆蓋 Gemini 返回的
-            userStores.forEach(store => {
+            // 4. 用後端的 displayName 覆蓋 Gemini 返回的
+            list.forEach(store => {
                 if (displayNameMap[store.name]) {
                     store.displayName = displayNameMap[store.name];
                 }
             });
 
-            // Double check: if list is empty but we expected something, it might be the key doesn't have access
-            setStores(userStores);
-            console.log(`[App] Stores refreshed: ${userStores.length} stores found for user ${currentUser}`);
+            // 5. 顯示所有 Gemini 返回的 spaces（已經是當前 API Key 的 spaces）
+            setStores(list);
+            console.log(`[App] Stores refreshed: ${list.length} spaces found for user ${effectiveUsername}`);
             setStatus(AppStatus.Manager);
         } catch (err) {
             console.error('[App] Failed to refresh stores:', err);
@@ -355,11 +368,23 @@ const App: React.FC = () => {
 
                     if (response.ok) {
                         console.log('[App] Gemini API key saved to backend');
+                    } else if (response.status === 409) {
+                        // API Key 已被其他用戶使用
+                        const data = await response.json();
+                        throw new Error(data.message || '此 API Key 已被其他用戶使用');
                     } else {
                         console.warn('[App] Failed to save API key to backend');
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.error || 'Failed to save API key');
                     }
                 } catch (err) {
                     console.error('[App] Error saving API key to backend:', err);
+                    // 清除已設定的 API key
+                    geminiService.clearApiKey();
+                    localStorage.removeItem('gemini_api_key');
+                    setIsApiKeySelected(false);
+                    setApiKeyError(err instanceof Error ? err.message : '保存 API Key 失敗');
+                    return;
                 }
             }
 
@@ -382,6 +407,36 @@ const App: React.FC = () => {
             console.log(`[App] Creating space with prefix: ${prefixedName}`);
             const storeName = await geminiService.createRagStore(prefixedName);
             console.log(`[App] Space created: ${storeName}`);
+
+            // 自動生成 API key 並更新用戶的 spaces 列表
+            try {
+                const geminiKey = localStorage.getItem('gemini_api_key');
+                if (geminiKey && currentUser) {
+                    console.log(`[App] Auto-generating API key for new space: ${storeName}`);
+                    const response = await fetch(`/api/spaces/${encodeURIComponent(storeName)}/generate-key`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-username': currentUser
+                        },
+                        body: JSON.stringify({ 
+                            displayName: prefixedName, 
+                            geminiKey 
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`[App] API key generated for new space: ${data.apiKey}`);
+                        localStorage.setItem(`api_key_${storeName}`, data.apiKey);
+                    } else {
+                        console.warn('[App] Failed to auto-generate API key for new space');
+                    }
+                }
+            } catch (err) {
+                console.warn('[App] Error during auto API key generation:', err);
+            }
+
             await refreshStores();
             const newStore = { name: storeName, displayName: prefixedName };
             handleSelectStore(newStore);

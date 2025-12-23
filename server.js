@@ -344,6 +344,19 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
 
+    // 檢查該 Gemini API Key 是否已被其他用戶使用
+    if (geminiApiKey && geminiApiKey.trim() !== '') {
+        for (const [otherUsername, userData] of Object.entries(users.users)) {
+            if (otherUsername !== username && userData.geminiApiKey === geminiApiKey) {
+                console.log(`[Server] Gemini API key already in use by user: ${otherUsername}`);
+                return res.status(409).json({ 
+                    error: 'API key already in use',
+                    message: `此 Gemini API Key 已被用戶 "${otherUsername}" 使用，每個 API Key 只能綁定一個帳號。`
+                });
+            }
+        }
+    }
+
     users.users[username].geminiApiKey = geminiApiKey;
     users.users[username].updatedAt = new Date().toISOString();
     users.lastModified = new Date().toISOString();
@@ -376,6 +389,74 @@ app.get('/api/spaces/list-with-keys', (req, res) => {
 });
 
 // ==== Space API ====
+
+// 同步本地 JSON 與 Gemini File Search API（以 Gemini 為準）
+app.post('/api/spaces/sync', (req, res) => {
+    const username = req.headers['x-username'];
+    const { geminiSpaces } = req.body;
+
+    if (!username) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    if (!Array.isArray(geminiSpaces)) {
+        return res.status(400).json({ error: 'Invalid geminiSpaces format' });
+    }
+
+    console.log(`[Server] Syncing spaces for user ${username} with Gemini API`);
+    console.log(`[Server] Gemini spaces count: ${geminiSpaces.length}`);
+
+    try {
+        const users = readJSONFile(USERS_FILE, { users: {} });
+        const apiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
+
+        if (!users.users[username]) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // 1. 建立 Gemini 實際存在的 spaces 集合
+        const geminiSpaceSet = new Set(geminiSpaces);
+        console.log(`[Server] Gemini spaces: ${Array.from(geminiSpaceSet).join(', ')}`);
+
+        // 2. 清理 api-keys.json：移除已經不存在於 Gemini 的 spaces
+        let apiKeysChanged = false;
+        Object.entries(apiKeys.apiKeys || {}).forEach(([keyId, keyData]) => {
+            if (keyData.username === username && !geminiSpaceSet.has(keyData.spaceName)) {
+                console.log(`[Server] Removing obsolete API key for deleted space: ${keyData.spaceName}`);
+                delete apiKeys.apiKeys[keyId];
+                apiKeysChanged = true;
+            }
+        });
+
+        if (apiKeysChanged) {
+            apiKeys.lastModified = new Date().toISOString();
+            writeJSONFile(API_KEYS_FILE, apiKeys);
+        }
+
+        // 3. 更新 users.json：從 Gemini spaces 中提取簡短名稱（去掉 fileSearchStores/ 前綴）
+        const shortSpaceNames = geminiSpaces.map(fullName => {
+            // fullName 格式: "fileSearchStores/tatungqa20251222-8pzqxrbtjpxb"
+            // 提取後半部分: "tatungqa20251222-8pzqxrbtjpxb"
+            return fullName.replace(/^fileSearchStores\//, '');
+        });
+
+        users.users[username].spaces = shortSpaceNames;
+        users.users[username].updatedAt = new Date().toISOString();
+        users.lastModified = new Date().toISOString();
+        writeJSONFile(USERS_FILE, users);
+
+        console.log(`[Server] User ${username} spaces updated to: ${shortSpaceNames.join(', ')}`);
+
+        res.json({ 
+            message: 'Spaces synced successfully',
+            spacesCount: geminiSpaces.length,
+            spaces: shortSpaceNames
+        });
+    } catch (error) {
+        console.error('[Server] Error syncing spaces:', error);
+        res.status(500).json({ error: 'Failed to sync spaces' });
+    }
+});
 
 // 更新用戶的 spaces 列表
 function updateUserSpaces(username, spaceName, action = 'add') {
@@ -432,6 +513,17 @@ app.post('/api/spaces/:spaceName/generate-key', (req, res) => {
     apiKeysData.apiKeys[apiKey] = keyData;
     apiKeysData.lastModified = new Date().toISOString();
     writeJSONFile(API_KEYS_FILE, apiKeysData);
+
+    // 更新用戶的 spaces 列表（從 displayName 中提取 space 名稱）
+    if (username && displayName) {
+        // displayName 格式為 "username_spacename"，需要提取 spacename
+        const spaceNameWithoutPrefix = displayName.startsWith(`${username}_`) 
+            ? displayName.substring(username.length + 1)
+            : displayName;
+        
+        console.log(`[API Server] Updating user spaces: adding ${spaceNameWithoutPrefix} to ${username}`);
+        updateUserSpaces(username, spaceNameWithoutPrefix, 'add');
+    }
 
     console.log(`[API Server] Generated API key for space: ${displayName} (user: ${username || 'anonymous'})`);
 
