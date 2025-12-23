@@ -29,3 +29,5 @@ data/api-keys.json
 *.njsproj
 *.sln
 *.sw?
+data/spaces-config.json
+
