@@ -389,7 +389,7 @@ const App: React.FC = () => {
             }
 
             setIsApiKeySelected(true);
-            await refreshStores();
+            await refreshStores(currentUser || undefined);
         } catch (err) {
             console.error('[App] Manual API key initialization failed:', err);
             handleApiError(err, "Initialization");
@@ -495,7 +495,7 @@ const App: React.FC = () => {
 
             // Fetch Space Config
             try {
-                const configRes = await fetch(`/api/spaces/${store.name}/config`);
+                const configRes = await fetch(`/api/spaces/${encodeURIComponent(store.name)}/config`);
                 if (configRes.ok) {
                     const config = await configRes.json();
                     setCurrentSpaceConfig(config);
@@ -515,7 +515,7 @@ const App: React.FC = () => {
     const handleSaveSpaceConfig = async (newConfig: SpaceConfig) => {
         if (!selectedStore) return;
         try {
-            await fetch(`/api/spaces/${selectedStore.name}/config`, {
+            await fetch(`/api/spaces/${encodeURIComponent(selectedStore.name)}/config`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newConfig)
@@ -562,6 +562,38 @@ const App: React.FC = () => {
         setIsQueryLoading(true);
 
         try {
+            console.log('[App] Calling fileSearch...');
+            const result = await geminiService.fileSearch(selectedStore.name, message, currentSpaceConfig);
+            console.log('[App] fileSearch result:', result);
+            
+            if (!result || !result.text) {
+                console.error('[App] Empty or invalid result:', result);
+                throw new Error('收到空的回應');
+            }
+            
+            const assistantMsg: ChatMessage = {
+                role: 'model',
+                parts: [{ text: result.text }],
+                groundingChunks: result.groundingChunks
+            };
+            const finalHistory = [...newHistory, assistantMsg];
+            setChatHistory(finalHistory);
+            saveHistory(selectedStore.name, finalHistory);
+            
+            console.log('[App] Message added to history');
+
+            // Update usage stats
+            await geminiService.updateUsageStats(selectedStore.name);
+        } catch (err) {
+            console.error('[App] Query failed:', err);
+            // 添加錯誤訊息到聊天記錄
+            const errorMsg: ChatMessage = {
+                role: 'model',
+                parts: [{ text: `抱歉，查詢時發生錯誤：${err instanceof Error ? err.message : String(err)}` }]
+            };
+            const errorHistory = [...newHistory, errorMsg];
+            setChatHistory(errorHistory);
+            saveHistory(selectedStore.name, errorHistory);
         } finally {
             setIsQueryLoading(false);
         }
@@ -703,7 +735,12 @@ const App: React.FC = () => {
                                 history={chatHistory}
                                 isQueryLoading={isQueryLoading}
                                 onSendMessage={handleSendMessage}
-                                onNewChat={async () => { await refreshStores(); setStatus(AppStatus.Manager); }}
+                                onNewChat={() => {
+                                    setChatHistory([]);
+                                    if (selectedStore) {
+                                        saveHistory(selectedStore.name, []);
+                                    }
+                                }}
                                 exampleQuestions={exampleQuestions}
                             />
                         </div>

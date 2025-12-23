@@ -85,11 +85,68 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
     checkInitialized();
     console.log(`[GeminiService] Uploading file: ${file.name} to store: ${ragStoreName}`);
 
+    // 根據文件擴展名決定 MIME type
+    const getMimeType = (fileName: string, fileType: string): string => {
+        // 如果瀏覽器提供了有效的 MIME type，優先使用
+        if (fileType && fileType.includes('/')) {
+            return fileType;
+        }
+
+        // 根據文件擴展名映射 MIME type
+        const ext = fileName.toLowerCase().split('.').pop() || '';
+        const mimeTypeMap: Record<string, string> = {
+            // Text formats
+            'txt': 'text/plain',
+            'md': 'text/markdown',
+            'markdown': 'text/markdown',
+            'csv': 'text/csv',
+            'html': 'text/html',
+            'htm': 'text/html',
+            'xml': 'text/xml',
+            'json': 'application/json',
+            
+            // Document formats
+            'pdf': 'application/pdf',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls': 'application/vnd.ms-excel',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'ppt': 'application/vnd.ms-powerpoint',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            
+            // Code formats
+            'js': 'text/javascript',
+            'ts': 'text/typescript',
+            'jsx': 'text/javascript',
+            'tsx': 'text/typescript',
+            'py': 'text/x-python',
+            'java': 'text/x-java',
+            'cpp': 'text/x-c++src',
+            'c': 'text/x-csrc',
+            'h': 'text/x-chdr',
+            'css': 'text/css',
+            'scss': 'text/x-scss',
+            'sql': 'application/sql',
+            'sh': 'application/x-sh',
+            
+            // Other formats
+            'rtf': 'application/rtf',
+            'odt': 'application/vnd.oasis.opendocument.text',
+            'zip': 'application/zip',
+        };
+
+        return mimeTypeMap[ext] || 'text/plain';
+    };
+
+    const mimeType = getMimeType(file.name, file.type);
+    console.log(`[GeminiService] File: ${file.name}, MIME type: ${mimeType}`);
+
     let op = await ai.fileSearchStores.uploadToFileSearchStore({
         file: file,
         fileSearchStoreName: ragStoreName,
         config: {
             displayName: file.name,
+            mimeType: mimeType,
         }
     });
 
@@ -109,7 +166,6 @@ export const DEFAULT_SYSTEM_INSTRUCTION = "DO NOT ASK THE USER TO READ THE MANUA
 export async function fileSearch(ragStoreName: string, query: string, config?: SpaceConfig): Promise<QueryResult> {
     checkInitialized();
     console.log(`[GeminiService] Performing file search in store: ${ragStoreName}`);
-    console.log(`[GeminiService] Query: ${query}`);
     console.log(`[GeminiService] Query: ${query}`);
 
     // Default config if not provided
@@ -132,18 +188,29 @@ export async function fileSearch(ragStoreName: string, query: string, config?: S
             ]
         }
     });
+    
     console.log('[GeminiService] File search completed');
+    console.log('[GeminiService] Response:', JSON.stringify(response, null, 2));
 
+    const responseText = response.text || '';
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    
+    console.log(`[GeminiService] Response text length: ${responseText.length}`);
+    console.log(`[GeminiService] Grounding chunks: ${groundingChunks.length}`);
+    
+    if (!responseText) {
+        console.warn('[GeminiService] Warning: Empty response text');
+    }
+    
     return {
-        text: response.text,
+        text: responseText,
         groundingChunks: groundingChunks,
     };
 }
 
 export async function updateUsageStats(ragStoreName: string): Promise<void> {
     try {
-        await fetch(`/api/spaces/${ragStoreName}/stats/increment`, { method: 'POST' });
+        await fetch(`/api/spaces/${encodeURIComponent(ragStoreName)}/stats/increment`, { method: 'POST' });
     } catch (e) {
         console.error('[GeminiService] Failed to update usage stats', e);
     }

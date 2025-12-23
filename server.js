@@ -126,8 +126,10 @@ app.get('/health', (req, res) => {
 // 登入
 app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body;
+    console.log(`[Auth] Login attempt for user: ${username}`);
 
     if (!username || !password) {
+        console.log('[Auth] Login failed: Missing credentials');
         return res.status(400).json({ error: 'Missing username or password' });
     }
 
@@ -135,16 +137,18 @@ app.post('/api/auth/login', (req, res) => {
     const user = users.users[username];
 
     if (!user) {
+        console.log(`[Auth] Login failed: User not found - ${username}`);
         return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isValidPassword = bcrypt.compareSync(password, user.password);
 
     if (!isValidPassword) {
+        console.log(`[Auth] Login failed: Invalid password for user - ${username}`);
         return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    console.log(`[Server] User logged in: ${username}`);
+    console.log(`[Auth] ✓ User logged in: ${username} (role: ${user.role}, spaces: ${(user.spaces || []).length})`);
 
     res.json({
         username,
@@ -372,6 +376,8 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 // 獲取 API Keys 列表（用於前端補充正確的 displayName）
 app.get('/api/spaces/list-with-keys', (req, res) => {
     const requestingUser = req.headers['x-username'];
+    console.log(`[Spaces] Fetching API keys for user: ${requestingUser}`);
+    
     const allApiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
 
     // 只返回當前用戶的 API Keys
@@ -382,6 +388,8 @@ app.get('/api/spaces/list-with-keys', (req, res) => {
         }
     });
 
+    console.log(`[Spaces] Found ${Object.keys(userApiKeys).length} API keys for user: ${requestingUser}`);
+    
     res.json({
         apiKeys: userApiKeys,
         lastModified: allApiKeys.lastModified
@@ -391,38 +399,38 @@ app.get('/api/spaces/list-with-keys', (req, res) => {
 // ==== Space API ====
 
 // 同步本地 JSON 與 Gemini File Search API（以 Gemini 為準）
-app.post('/api/spaces/sync', (req, res) => {
-    const username = req.headers['x-username'];
-    const { geminiSpaces } = req.body;
+app.console.log(`[Sync] Syncing spaces for user: ${username}`);
 
     if (!username) {
+        console.log('[Sync] ✗ Not authenticated');
         return res.status(401).json({ error: 'Not authenticated' });
     }
 
     if (!Array.isArray(geminiSpaces)) {
+        console.log('[Sync] ✗ Invalid geminiSpaces format');
         return res.status(400).json({ error: 'Invalid geminiSpaces format' });
     }
 
-    console.log(`[Server] Syncing spaces for user ${username} with Gemini API`);
-    console.log(`[Server] Gemini spaces count: ${geminiSpaces.length}`);
+    console.log(`[Sync] Gemini returned ${geminiSpaces.length} spaces`);
 
     try {
         const users = readJSONFile(USERS_FILE, { users: {} });
         const apiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
 
         if (!users.users[username]) {
+            console.log(`[Sync] ✗ User not found: ${username}`);
             return res.status(404).json({ error: 'User not found' });
         }
 
         // 1. 建立 Gemini 實際存在的 spaces 集合
         const geminiSpaceSet = new Set(geminiSpaces);
-        console.log(`[Server] Gemini spaces: ${Array.from(geminiSpaceSet).join(', ')}`);
+        console.log(`[Sync] Gemini spaces: ${Array.from(geminiSpaceSet).join(', ')}`);
 
         // 2. 清理 api-keys.json：移除已經不存在於 Gemini 的 spaces
         let apiKeysChanged = false;
         Object.entries(apiKeys.apiKeys || {}).forEach(([keyId, keyData]) => {
             if (keyData.username === username && !geminiSpaceSet.has(keyData.spaceName)) {
-                console.log(`[Server] Removing obsolete API key for deleted space: ${keyData.spaceName}`);
+                console.log(`[Sync] Removing obsolete API key for deleted space: ${keyData.spaceName}`);
                 delete apiKeys.apiKeys[keyId];
                 apiKeysChanged = true;
             }
@@ -431,6 +439,7 @@ app.post('/api/spaces/sync', (req, res) => {
         if (apiKeysChanged) {
             apiKeys.lastModified = new Date().toISOString();
             writeJSONFile(API_KEYS_FILE, apiKeys);
+            console.log('[Sync] ✓ API keys cleaned up');
         }
 
         // 3. 更新 users.json：從 Gemini spaces 中提取簡短名稱（去掉 fileSearchStores/ 前綴）
@@ -445,11 +454,15 @@ app.post('/api/spaces/sync', (req, res) => {
         users.lastModified = new Date().toISOString();
         writeJSONFile(USERS_FILE, users);
 
-        console.log(`[Server] User ${username} spaces updated to: ${shortSpaceNames.join(', ')}`);
+        console.log(`[Sync] ✓ User ${username} spaces updated to: ${shortSpaceNames.join(', ')}`);
 
         res.json({ 
             message: 'Spaces synced successfully',
             spacesCount: geminiSpaces.length,
+            spaces: shortSpaceNames
+        });
+    } catch (error) {
+        console.error('[Sync] ✗Spaces.length,
             spaces: shortSpaceNames
         });
     } catch (error) {
@@ -647,12 +660,17 @@ app.get('/api/spaces/:spaceName/api-key', (req, res) => {
     res.status(404).json({ error: 'API key not found for this space' });
 });
 
-// ==== Space Configuration & Stats API ====
-
-// Get space config
-app.get('/api/spaces/:spaceName/config', (req, res) => {
-    const { spaceName } = req.params;
+// ==== Spusername = req.headers['x-username'];
+    console.log(`[Config] Get config for space: ${spaceName} (user: ${username})`);
+    
     const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+    const config = spacesConfig.configs[spaceName] || {
+        usageCount: 0,
+        model: 'gemini-2.5-flash',
+        systemInstruction: ''
+    };
+    
+    console.log(`[Config] Config retrieved: usageCount=${config.usageCount}, model=${config.model}`)onst spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
     const config = spacesConfig.configs[spaceName] || {
         usageCount: 0,
         model: 'gemini-2.5-flash',
@@ -679,11 +697,8 @@ app.put('/api/spaces/:spaceName/config', (req, res) => {
     writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
 
     res.json({ message: 'Configuration saved', config: spacesConfig.configs[spaceName] });
-});
-
-// Increment usage stats (called by frontend)
-app.post('/api/spaces/:spaceName/stats/increment', (req, res) => {
-    const { spaceName } = req.params;
+    const username = req.headers['x-username'];
+    console.log(`[Stats] Increment usage for space: ${spaceName} (user: ${username})`);
 
     const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
 
@@ -691,6 +706,12 @@ app.post('/api/spaces/:spaceName/stats/increment', (req, res) => {
         spacesConfig.configs[spaceName] = {};
     }
 
+    spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
+    spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
+    spacesConfig.lastModified = new Date().toISOString();
+    writeJSONFile(SPACES_CONFIG_FILE, spacesConfig);
+
+    console.log(`[Stats] ✓ Usage count: ${spacesConfig.configs[spaceName].usageCount}`);
     spacesConfig.configs[spaceName].usageCount = (spacesConfig.configs[spaceName].usageCount || 0) + 1;
     spacesConfig.configs[spaceName].lastActive = new Date().toISOString();
     spacesConfig.lastModified = new Date().toISOString();

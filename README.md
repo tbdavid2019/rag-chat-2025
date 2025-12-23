@@ -4,18 +4,94 @@
 
 # 333 RAG 知識庫聊天系統
 
-基於 Gemini File Search API 打造的智能知識庫管理與對話系統，支援多用戶認證與數據隔離。
+基於 Gemini File Search API 打造的智能知識庫管理與對話系統，支援多用戶認證、數據隔離與完整日誌追蹤。
 
 ## 功能特色
 
 - 🗂️ **知識庫管理**：創建多個獨立的知識空間（Knowledge Space）
-- 📄 **文件上傳**：支援多種文件格式的上傳與索引
+- 📄 **文件上傳**：支援 30+ 種文件格式（MD, PDF, DOC, TXT, 程式碼等）
 - 💬 **RAG 對話**：基於文件內容的智能問答
 - 🔌 **OpenAI 兼容 API**：每個知識空間可生成 OpenAI 格式的 API 接口
-- 🔑 **API Key 管理**：自動為每個空間生成唯一的 API Key
+- 🔑 **API Key 管理**：
+  - 每個用戶只能綁定一個 Gemini API Key
+  - 自動為每個空間生成唯一的 API Key
+  - 防止重複綁定保護機制
 - 💾 **對話記錄**：自動保存每個空間的聊天歷史
 - 👥 **多用戶系統**：支援用戶認證與管理員控制台
 - 🔒 **數據隔離**：每個用戶只能看到和管理自己的知識空間
+- 🔄 **自動同步**：以 Gemini File Search API 為真實來源，自動同步本地數據
+- 📊 **完整日誌**：所有操作都有詳細的 Docker 日誌記錄
+
+## 系統架構
+
+### 數據同步邏輯
+
+系統採用 **Gemini File Search API 優先** 的設計：
+
+1. **登入時自動同步**：用戶登入後，系統會：
+   - 使用用戶的 Gemini API Key 調用 File Search API
+   - 獲取該 API Key 實際擁有的所有 spaces
+   - 更新本地 JSON 文件（users.json, api-keys.json）
+   - 清理已在 Gemini 刪除的 spaces
+
+2. **手動輸入 API Key**：當用戶輸入新的 Gemini API Key 時：
+   - 立即從 Gemini 獲取 spaces 列表
+   - 同步並顯示所有 spaces
+   - 檢查 API Key 是否已被其他用戶使用
+
+3. **創建 Space**：創建新 space 時：
+   - 在 Gemini 創建 RAG store
+   - 自動生成 API key 並保存到 api-keys.json
+   - 更新 users.json 的 spaces 列表
+
+### 文件格式支援
+
+系統支援以下文件格式（自動識別 MIME type）：
+
+**文本格式**：txt, md, markdown, csv, html, xml, json  
+**文檔格式**：pdf, doc, docx, xls, xlsx, ppt, pptx  
+**程式碼格式**：js, ts, jsx, tsx, py, java, cpp, c, css, sql, sh  
+**其他格式**：rtf, odt, zip
+
+### 日誌系統
+
+所有關鍵操作都會記錄到 Docker logs，方便追蹤和調試：
+
+**登入流程** `[Auth]`
+```
+[Auth] Login attempt for user: username
+[Auth] ✓ User logged in: username (role: user, spaces: 2)
+```
+
+**Spaces 同步** `[Sync]`
+```
+[Sync] Syncing spaces for user: username
+[Sync] Gemini returned 2 spaces
+[Sync] ✓ User username spaces updated to: space1, space2
+```
+
+**API Keys 查詢** `[Spaces]`
+```
+[Spaces] Fetching API keys for user: username
+[Spaces] Found 2 API keys for user: username
+```
+
+**Space 配置** `[Config]`
+```
+[Config] Get config for space: fileSearchStores/xxx (user: username)
+[Config] Config retrieved: usageCount=5, model=gemini-2.5-flash
+```
+
+**使用統計** `[Stats]`
+```
+[Stats] Increment usage for space: fileSearchStores/xxx (user: username)
+[Stats] ✓ Usage count: 6
+```
+
+查看即時日誌：
+```bash
+docker logs -f rag-chat-2025
+```
 
 ## 本機運行
 
@@ -77,13 +153,20 @@
 
 ### Gemini API Key 管理
 
+- **唯一綁定**：每個 Gemini API Key 只能綁定一個用戶帳號
+  - 系統會自動檢查 API Key 是否已被其他用戶使用
+  - 嘗試使用已綁定的 Key 會收到明確的錯誤提示
+
 - **持久化儲存**：用戶輸入的 Gemini API Key 會同時儲存到：
   - 前端 localStorage（快速載入）
   - 後端 JSON 文件（data/users.json，持久化）
   
 - **自動載入**：用戶登入時自動載入已儲存的 API Key
 
-- **用戶隔離**：每個用戶可以使用自己的 Gemini API Key，實現完全的數據隔離
+- **自動同步**：
+  - 登入時自動從 Gemini API 獲取最新的 spaces 列表
+  - 清理本地已刪除的 spaces 記錄
+  - 確保數據一致性
 
 - **數據安全**：
   - API Key 僅限用戶本人或管理員可以修改
@@ -140,11 +223,16 @@ Express (3000)
    - `ADMIN_USERNAME`：管理員帳號（預設：admin）
    - `ADMIN_PASSWORD`：管理員密碼（預設：admin123）
 
-2. 準備數據目錄（重要）：
+2. **準備數據目錄（重要）**：
    ```bash
    mkdir -p data
    sudo chown -R 1001:1001 data/
    ```
+   
+   > **⚠️ 權限說明**：
+   > - 容器以 nodejs 用戶 (UID 1001) 運行
+   > - 必須設定正確權限，否則無法寫入用戶數據
+   > - 如未設定會導致 API Key 消失、spaces 無法同步等問題
 
 3. 拉取並運行容器：
    ```bash
@@ -157,9 +245,19 @@ Express (3000)
      tbdavid2019/333ragchat:latest
    ```
 
-4. 查看日誌：
+4. 查看日誌（即時追蹤所有操作）：
    ```bash
    docker logs -f rag-chat-2025
+   ```
+   
+   你會看到標記清楚的日誌：
+   ```
+   [Auth] Login attempt for user: tatung
+   [Auth] ✓ User logged in: tatung (role: user, spaces: 2)
+   [Sync] Syncing spaces for user: tatung
+   [Spaces] Found 2 API keys for user: tatung
+   [Config] Get config for space: fileSearchStores/tatung-xxx
+   [Stats] ✓ Usage count: 15
    ```
 
 5. 停止並移除容器：
@@ -175,43 +273,20 @@ Express (3000)
 
 ### 方式二：使用 Docker Build（適合開發者）
 
-1. 創建 `.env` 檔案並設定環境變數：
-   ```bash
-   cp .env.example .env
-   ```
-   
-   編輯 `.env` 設定：
-   - `GEMINI_API_KEY`：你的 Gemini API Key
-   - `ADMIN_USERNAME`：管理員帳號
-   - `ADMIN_PASSWORD`：管理員密碼
+1. 創建 `.env` 檔案並設定環境變數
 
-2. 建立 Docker 映像：
+2. **設定數據目錄權限**：
+   ```bash
+   mkdir -p data
+   sudo chown -R 1001:1001 data/
+   ```
+
+3. 建立 Docker 映像：
    ```bash
    docker build -t rag-chat-2025:latest .
    ```
 
-3. 運行容器：
-   ```bash
-   docker run -d \
-     -p 3000:3000 \
-     -v $(pwd)/data:/app/data \
-     --env-file .env \
-     --name rag-chat-2025 \
-     rag-chat-2025:latest
-   ```
-   
-   **注意**：
-   - 使用 `-v $(pwd)/data:/app/data` 掛載數據目錄，確保用戶數據持久化
-
-    > **重要：目錄權限設定**
-    > 由於容器是以非 root 用戶 (UID 1001) 運行，您必須確保宿主機目錄存在且權限正確：
-    > ```bash
-    > mkdir -p data
-    > sudo chown -R 1001:1001 data/
-    > ```
-    > 如果跳過此步驟，容器將無法寫入掛載的卷，導致重啟後數據丟失（如 API Key 消失）。
-
-321a. **運行容器（設定權限後）：**
+4. 運行容器：
    ```bash
    docker run -d \
      -p 3000:3000 \
@@ -221,50 +296,18 @@ Express (3000)
      rag-chat-2025:latest
    ```
 
-4. 查看日誌：
+5. 綜合指令（一鍵重建與部署）：
    ```bash
-   docker logs -f rag-chat-2025
+   docker stop rag-chat-2025 && \
+   docker rm rag-chat-2025 && \
+   docker build -t rag-chat-2025:latest . && \
+   docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --env-file .env --name rag-chat-2025 rag-chat-2025:latest
    ```
 
-5. 停止並移除容器：
+6. 推送到 Docker Hub：
    ```bash
-   docker stop rag-chat-2025
-   docker rm rag-chat-2025
-   ```
-
-6. 重新啟動已存在的容器：
-   ```bash
-   docker start rag-chat-2025
-   ```
-
-7. 綜合
-```
-docker stop rag-chat-2025 && docker rm rag-chat-2025 && docker build -t rag-chat-2025:latest . && docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --env-file .env --name rag-chat-2025 rag-chat-2025:latest
-```
-```
-docker tag rag-chat-2025:latest tbdavid2019/333ragchat:latest
-docker push tbdavid2019/333ragchat:latest
-```
-
-
-### 方式二：使用 Docker Compose（適合快速啟動）
-
-1. 確保已安裝 Docker 和 Docker Compose
-
-2. 創建 `.env` 檔案並設定 API Key：
-   ```bash
-   cp .env.example .env
-   # 編輯 .env 填入你的 GEMINI_API_KEY
-   ```
-
-3. 啟動容器：
-   ```bash
-   docker-compose up -d
-   ```
-
-4. 停止容器：
-   ```bash
-   docker-compose down
+   docker tag rag-chat-2025:latest tbdavid2019/333ragchat:latest
+   docker push tbdavid2019/333ragchat:latest
    ```
 
 ### 訪問應用程式
@@ -304,6 +347,24 @@ docker push tbdavid2019/333ragchat:latest
 - **Server 會根據 API Key 自動識別並使用對應空間的文件庫**
 - **生產環境單一端口**：SSL 證書只需配置一次
 
+## OpenAI Compatible API
+
+每個知識空間都可以生成一個 OpenAI 兼容的 API 接口：
+
+1. 進入某個 Space
+2. 點擊側邊欄的「生成 API Key」按鈕
+3. 複製 endpoint URL 和 API key
+4. 使用於任何支援 OpenAI 的工具
+
+> **重新生成密鑰**：如果你需要撤銷舊密鑰，請點擊 API Key 旁邊的「Regenerate Key」按鈕。這將立即使舊密鑰失效並生成新密鑰。
+
+### 關鍵概念
+
+- **所有空間共享同一個 Endpoint**：`http://localhost:3000/v1/chat/completions`
+- **每個空間擁有唯一的 API Key**：`grag-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+- **服務器根據 API Key 自動識別並使用對應空間的文檔庫**
+- **生產環境單端口架構**：SSL 證書只需配置一次
+
 ### 使用範例
 
 ```bash
@@ -325,6 +386,56 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 - Continue.dev
 - LibreChat
 - 其他支援自定義 OpenAI endpoint 的應用
+
+## 疑難排解
+
+### 常見問題
+
+**Q: Docker 容器重啟後 API Key 消失了？**
+
+A: 這是權限問題，請確保：
+```bash
+sudo chown -R 1001:1001 data/
+```
+
+**Q: 看不到自己的 knowledge spaces？**
+
+A: 系統會在登入時自動同步，如果仍看不到：
+1. 檢查 Docker logs：`docker logs -f rag-chat-2025`
+2. 確認 Gemini API Key 正確
+3. 查看 `[Sync]` 日誌是否有錯誤
+
+**Q: 上傳文件出現 MIME type 錯誤？**
+
+A: 系統已支援 30+ 種文件格式，如果仍出現問題：
+- 確認文件副檔名正確（如 `.md`, `.pdf`, `.txt`）
+- 查看 Docker logs 中的錯誤訊息
+
+**Q: 無法查詢文件內容？**
+
+A: 確認：
+1. 文件已成功上傳（檢查 Space 的文件列表）
+2. Gemini API Key 有效
+3. 查看 Docker logs 中的 `[Query]` 日誌
+
+**Q: URL 中的空間名稱有特殊字符導致 404？**
+
+A: 系統已自動處理 URL 編碼，如果仍有問題，避免在 space 名稱中使用 `/` 等特殊字符
+
+### 日誌追蹤
+
+查看即時日誌以了解系統運作：
+```bash
+docker logs -f rag-chat-2025
+```
+
+關鍵日誌標記：
+- `[Auth]` - 用戶登入/認證
+- `[Sync]` - Spaces 同步操作
+- `[Spaces]` - API Keys 查詢
+- `[Config]` - Space 配置讀取
+- `[Stats]` - 使用統計更新
+- `[Query]` - 文件查詢操作
 
 ---
 
