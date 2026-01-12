@@ -408,7 +408,41 @@ A: 系統會在登入時自動同步，如果仍看不到：
 2. 確認 Gemini API Key 正確
 3. 查看 `[Sync]` 日誌是否有錯誤
 
-**Q: 上傳文件出現 MIME type 錯誤？**
+**Q: 上傳 .docx 文件出現 MIME type 錯誤？**
+
+A: 這是 Google GenAI SDK 的已知 bug（[GitHub Issue #1900](https://github.com/googleapis/python-genai/issues/1900)）。
+
+**問題原因**：
+- 瀏覽器上傳 `.docx` 文件時，`File.type` 可能返回空字符串
+- SDK 在處理 `config.mimeType` 參數時存在 bug，即使提供正確格式也會報錯
+
+**解決方案**（已修復）：
+系統已實現以下修復：
+1. **增強 MIME type 檢測**：自動根據文件擴展名識別正確的 MIME type
+2. **創建新 File 對象**：用正確的 MIME type 創建新的 File 對象
+3. **SDK bug workaround**：不在 `config` 中明確傳遞 `mimeType`，讓 SDK 從 `File.type` 自動讀取
+
+**技術細節**：
+```typescript
+// 計算正確的 MIME type
+const mimeType = getMimeType(file.name, file.type);
+
+// 創建新 File 對象（File.type 是只讀的）
+const correctedFile = new File([file], file.name, { type: mimeType });
+
+// 上傳時不明確指定 mimeType（避免 SDK bug）
+await uploadToFileSearchStore({
+    file: correctedFile,  // SDK 會從 File.type 自動讀取
+    config: { displayName: file.name }  // 不包含 mimeType
+});
+```
+
+如果仍遇到問題：
+- 清除瀏覽器緩存（Ctrl+Shift+Delete）
+- 強制刷新頁面（Ctrl+Shift+R）
+- 查看瀏覽器控制台（F12）的日誌
+
+**Q: 上傳文件出現其他 MIME type 錯誤？**
 
 A: 系統已支援 30+ 種文件格式，如果仍出現問題：
 - 確認文件副檔名正確（如 `.md`, `.pdf`, `.txt`）

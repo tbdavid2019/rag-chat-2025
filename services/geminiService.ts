@@ -87,9 +87,18 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
 
     // 根據文件擴展名決定 MIME type
     const getMimeType = (fileName: string, fileType: string): string => {
-        // 如果瀏覽器提供了有效的 MIME type，優先使用
-        if (fileType && fileType.includes('/')) {
-            return fileType;
+        // 如果瀏覽器提供了 MIME type，清理並驗證它
+        if (fileType && typeof fileType === 'string') {
+            // 移除參數（如 ; charset=utf-8）並清理空白
+            const cleanedType = fileType.split(';')[0].trim();
+            // 驗證格式是否為 type/subtype
+            if (cleanedType && cleanedType.includes('/') && cleanedType.split('/').length === 2) {
+                const [type, subtype] = cleanedType.split('/');
+                if (type && subtype) {
+                    console.log(`[GeminiService] Using browser-provided MIME type: ${cleanedType}`);
+                    return cleanedType;
+                }
+            }
         }
 
         // 根據文件擴展名映射 MIME type
@@ -104,7 +113,7 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
             'htm': 'text/html',
             'xml': 'text/xml',
             'json': 'application/json',
-            
+
             // Document formats
             'pdf': 'application/pdf',
             'doc': 'application/msword',
@@ -113,7 +122,7 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
             'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'ppt': 'application/vnd.ms-powerpoint',
             'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            
+
             // Code formats
             'js': 'text/javascript',
             'ts': 'text/typescript',
@@ -128,25 +137,35 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
             'scss': 'text/x-scss',
             'sql': 'application/sql',
             'sh': 'application/x-sh',
-            
+
             // Other formats
             'rtf': 'application/rtf',
             'odt': 'application/vnd.oasis.opendocument.text',
             'zip': 'application/zip',
         };
 
-        return mimeTypeMap[ext] || 'text/plain';
+        const mappedType = mimeTypeMap[ext] || 'text/plain';
+        console.log(`[GeminiService] Using extension-based MIME type for .${ext}: ${mappedType}`);
+        return mappedType;
     };
 
     const mimeType = getMimeType(file.name, file.type);
-    console.log(`[GeminiService] File: ${file.name}, MIME type: ${mimeType}`);
+    console.log(`[GeminiService] File: ${file.name}, Original MIME type: '${file.type}', Computed MIME type: '${mimeType}'`);
+
+    // CRITICAL: Create a new File object with the corrected MIME type
+    // The SDK will auto-detect the MIME type from File.type property
+    // DO NOT pass mimeType explicitly in config - this causes SDK bugs
+    const correctedFile = new File([file], file.name, { type: mimeType });
+    console.log(`[GeminiService] Created new File object with MIME type: '${correctedFile.type}'`);
+    console.log(`[GeminiService] Uploading to SDK (SDK will auto-detect MIME type from File.type)...`);
 
     let op = await ai.fileSearchStores.uploadToFileSearchStore({
-        file: file,
+        file: correctedFile,
         fileSearchStoreName: ragStoreName,
         config: {
             displayName: file.name,
-            mimeType: mimeType,
+            // DO NOT include mimeType here - SDK bug causes INVALID_ARGUMENT
+            // The SDK will read it from correctedFile.type automatically
         }
     });
 
@@ -188,20 +207,20 @@ export async function fileSearch(ragStoreName: string, query: string, config?: S
             ]
         }
     });
-    
+
     console.log('[GeminiService] File search completed');
     console.log('[GeminiService] Response:', JSON.stringify(response, null, 2));
 
     const responseText = response.text || '';
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    
+
     console.log(`[GeminiService] Response text length: ${responseText.length}`);
     console.log(`[GeminiService] Grounding chunks: ${groundingChunks.length}`);
-    
+
     if (!responseText) {
         console.warn('[GeminiService] Warning: Empty response text');
     }
-    
+
     return {
         text: responseText,
         groundingChunks: groundingChunks,
