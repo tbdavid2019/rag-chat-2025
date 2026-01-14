@@ -210,7 +210,7 @@ const App: React.FC = () => {
         // 使用傳入的 username 或當前的 currentUser
         const effectiveUsername = usernameOverride || currentUser;
         console.log('[App] Refreshing stores list for user:', effectiveUsername);
-        
+
         // 如果沒有選中 API Key，不應該嘗試獲取 store
         if (!isApiKeySelected && !localStorage.getItem('gemini_api_key')) {
             console.log('[App] No API key selected, clearing stores.');
@@ -254,7 +254,7 @@ const App: React.FC = () => {
             if (effectiveUsername) {
                 try {
                     const geminiSpaceNames = new Set(list.map(s => s.name));
-                    
+
                     // 同步到後端：更新 users.json 和清理 api-keys.json
                     await fetch('/api/spaces/sync', {
                         method: 'POST',
@@ -263,6 +263,7 @@ const App: React.FC = () => {
                             'x-username': effectiveUsername
                         },
                         body: JSON.stringify({
+                            username: effectiveUsername,
                             geminiSpaces: Array.from(geminiSpaceNames)
                         })
                     });
@@ -419,9 +420,9 @@ const App: React.FC = () => {
                             'Content-Type': 'application/json',
                             'x-username': currentUser
                         },
-                        body: JSON.stringify({ 
-                            displayName: prefixedName, 
-                            geminiKey 
+                        body: JSON.stringify({
+                            displayName: prefixedName,
+                            geminiKey
                         })
                     });
 
@@ -565,12 +566,12 @@ const App: React.FC = () => {
             console.log('[App] Calling fileSearch...');
             const result = await geminiService.fileSearch(selectedStore.name, message, currentSpaceConfig);
             console.log('[App] fileSearch result:', result);
-            
+
             if (!result || !result.text) {
                 console.error('[App] Empty or invalid result:', result);
                 throw new Error('收到空的回應');
             }
-            
+
             const assistantMsg: ChatMessage = {
                 role: 'model',
                 parts: [{ text: result.text }],
@@ -579,7 +580,7 @@ const App: React.FC = () => {
             const finalHistory = [...newHistory, assistantMsg];
             setChatHistory(finalHistory);
             saveHistory(selectedStore.name, finalHistory);
-            
+
             console.log('[App] Message added to history');
 
             // Update usage stats
@@ -714,9 +715,15 @@ const App: React.FC = () => {
                                     processingFile={null}
                                     onUpload={handleUploadFiles}
                                     onDelete={async (docName) => {
-                                        await geminiService.deleteDocument(selectedStore!.name, docName);
-                                        const docs = await geminiService.listDocuments(selectedStore!.name);
-                                        setDocuments(docs);
+                                        try {
+                                            await geminiService.deleteDocument(selectedStore!.name, docName);
+                                            const docs = await geminiService.listDocuments(selectedStore!.name);
+                                            setDocuments(docs);
+                                        } catch (e) {
+                                            const errorMsg = e instanceof Error ? e.message : String(e);
+                                            console.error("Delete failed", e);
+                                            alert(`Failed to delete document: ${errorMsg}`);
+                                        }
                                     }}
                                 />
                                 <div className="mt-auto pt-4 border-t border-gem-mist">

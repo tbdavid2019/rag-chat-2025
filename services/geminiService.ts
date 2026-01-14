@@ -288,7 +288,8 @@ export async function deleteDocument(ragStoreName: string, documentName: string)
     console.log(`[GeminiService] Deleting document: ${documentName} from store: ${ragStoreName}`);
     try {
         await ai.fileSearchStores.documents.delete({
-            name: documentName
+            name: documentName,
+            config: { force: true }
         });
         console.log('[GeminiService] Document deleted successfully');
     } catch (error) {
