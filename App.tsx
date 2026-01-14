@@ -546,6 +546,12 @@ const App: React.FC = () => {
             const docs = await geminiService.listDocuments(selectedStore.name);
             setDocuments(docs);
             setStatus(AppStatus.Chatting);
+
+            // Refresh example questions based on new content
+            geminiService.generateExampleQuestions(selectedStore.name).then(questions => {
+                console.log('[App] Refreshed example questions:', questions);
+                setExampleQuestions(questions);
+            });
         } catch (err) {
             handleError("Upload failed", err);
         } finally {

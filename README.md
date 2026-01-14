@@ -12,7 +12,9 @@
 ## 功能特色
 
 - 🗂️ **知識庫管理**：創建多個獨立的知識空間（Knowledge Space）
-- 📄 **文件上傳**：支援 30+ 種文件格式（MD, PDF, DOC, TXT, 程式碼等）
+- 📄 **文件上傳**：支援 30+ 種文件格式（MD, PDF, DOC, TXT, 程式碼, 圖片等）
+- 🖼️ **圖片索引**：支援上傳圖片（JPG, PNG, WebP...），自動識別內容並轉換為文字索引
+- 🔍 **動態提問**：根據文件內容與語言，自動生成相關的範例問題
 - 💬 **RAG 對話**：基於文件內容的智能問答
 - 🔌 **OpenAI 兼容 API**：每個知識空間可生成 OpenAI 格式的 API 接口
 - 🔑 **API Key 管理**：
@@ -54,6 +56,7 @@
 **文本格式**：txt, md, markdown, csv, html, xml, json  
 **文檔格式**：pdf, doc, docx, xls, xlsx, ppt, pptx  
 **程式碼格式**：js, ts, jsx, tsx, py, java, cpp, c, css, sql, sh  
+**圖片格式**：jpg, jpeg, png, webp, heic, heif（自動生成文字描述）  
 **其他格式**：rtf, odt, zip
 
 ### 日誌系統

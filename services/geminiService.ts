@@ -165,13 +165,62 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
     // DO NOT pass mimeType explicitly in config - this causes SDK bugs
     const correctedFile = new File([file], file.name, { type: mimeType });
     console.log(`[GeminiService] Created new File object with MIME type: '${correctedFile.type}'`);
+
+    let activeFile = correctedFile;
+    let uploadName = file.name;
+
+    // Handle Image Files by converting to Text Description first (OCR/Captioning)
+    if (mimeType.startsWith('image/')) {
+        console.log('[GeminiService] Image detected. Generating description for indexing...');
+        try {
+            // Convert file to base64
+            const base64Data = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            // Extract base64 part
+            const base64Content = base64Data.split(',')[1];
+
+            const result = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    {
+                        text: "Describe this image in detail and transcribe any text found within it. This description will be used for indexing and retrieval."
+                    },
+                    {
+                        inlineData: {
+                            data: base64Content,
+                            mimeType: mimeType
+                        }
+                    }
+                ]
+            });
+
+            const description = result.text || "No description generated.";
+            console.log('[GeminiService] Image description generated successfully.');
+
+            // Create a text file with the description
+            const textBlob = new Blob([`[Image Description for ${file.name}]\n\n${description}`], { type: 'text/plain' });
+            activeFile = new File([textBlob], `${file.name}.txt`, { type: 'text/plain' });
+            uploadName = `${file.name}.txt`;
+            console.log(`[GeminiService] Converted image to text file: ${uploadName}`);
+
+        } catch (err) {
+            console.error('[GeminiService] Failed to process image:', err);
+            throw new Error(`Failed to process image for indexing: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+
     console.log(`[GeminiService] Uploading to SDK (SDK will auto-detect MIME type from File.type)...`);
 
     let op = await ai.fileSearchStores.uploadToFileSearchStore({
-        file: correctedFile,
+        file: activeFile,
         fileSearchStoreName: ragStoreName,
         config: {
-            displayName: file.name,
+            displayName: uploadName,
             // DO NOT include mimeType here - SDK bug causes INVALID_ARGUMENT
             // The SDK will read it from correctedFile.type automatically
         }
@@ -248,7 +297,7 @@ export async function generateExampleQuestions(ragStoreName: string): Promise<st
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: "Review the documents in this store. Generate 4 short, practical, and diverse example questions a user might ask about the content. Return as a JSON array of strings: [\"question1\", \"question2\", ...]",
+            contents: "Review the documents in this store. Identify the primary language of the documents. Generate 4 short, practical, and diverse example questions a user might ask about the content. IMPORTANT: The questions MUST be in the SAME language as the documents. Return as a JSON array of strings: [\"question1\", \"question2\", ...]",
             config: {
                 tools: [
                     {
