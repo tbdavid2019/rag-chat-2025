@@ -107,7 +107,35 @@ const SpaceSettingsModal: React.FC<SpaceSettingsModalProps> = ({
 
                     {/* System Prompt */}
                     <div>
-                        <label className="block text-sm font-medium mb-2 text-gem-offwhite">System Instruction</label>
+                        <div className="flex justify-between items-end mb-2">
+                            <label className="block text-sm font-medium text-gem-offwhite">System Prompt (Instructions & Tone)</label>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nKeep answers concise and under 100 words.").trim())}
+                                    className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
+                                >
+                                    +Concise
+                                </button>
+                                <button
+                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nProvide detailed explanations with examples.").trim())}
+                                    className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
+                                >
+                                    +Detailed
+                                </button>
+                                <button
+                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nMaintain a professional, formal tone.").trim())}
+                                    className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
+                                >
+                                    +Professional
+                                </button>
+                                <button
+                                    onClick={() => setSystemInstruction(DEFAULT_SYSTEM_INSTRUCTION)}
+                                    className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-red-900/40 text-red-300 transition-colors"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
                         <textarea
                             value={systemInstruction}
                             onChange={(e) => setSystemInstruction(e.target.value)}
@@ -115,7 +143,7 @@ const SpaceSettingsModal: React.FC<SpaceSettingsModalProps> = ({
                             placeholder={DEFAULT_SYSTEM_INSTRUCTION}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                            Define how the model should behave. This instruction is prepended to every request.
+                            Define how the model should behave, including answer length, tone, and format.
                         </p>
                     </div>
                 </div>

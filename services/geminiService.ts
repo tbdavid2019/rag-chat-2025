@@ -138,6 +138,14 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
             'sql': 'application/sql',
             'sh': 'application/x-sh',
 
+            // Image formats
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp',
+            'heic': 'image/heic',
+            'heif': 'image/heif',
+
             // Other formats
             'rtf': 'application/rtf',
             'odt': 'application/vnd.oasis.opendocument.text',
@@ -277,7 +285,14 @@ export async function deleteRagStore(ragStoreName: string): Promise<void> {
 
 export async function deleteDocument(ragStoreName: string, documentName: string): Promise<void> {
     checkInitialized();
-    await ai.fileSearchStores.documents.delete({
-        name: documentName
-    });
+    console.log(`[GeminiService] Deleting document: ${documentName} from store: ${ragStoreName}`);
+    try {
+        await ai.fileSearchStores.documents.delete({
+            name: documentName
+        });
+        console.log('[GeminiService] Document deleted successfully');
+    } catch (error) {
+        console.error('[GeminiService] Failed to delete document:', error);
+        throw error;
+    }
 }

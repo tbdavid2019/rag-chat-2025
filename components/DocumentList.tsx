@@ -28,7 +28,9 @@ const SUPPORTED_EXTENSIONS = [
     '.txt', '.md', '.html', '.json',
     // Code files
     '.py', '.js', '.java', '.cpp', '.sql', '.dart', '.ts',
-    '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt'
+    '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt',
+    // Images
+    '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'
 ];
 
 const DocumentList: React.FC<DocumentListProps> = ({ selectedStore, documents, isLoading, processingFile, onUpload, onDelete }) => {
@@ -76,7 +78,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ selectedStore, documents, i
                     ref={fileInputRef}
                     className="hidden"
                     onChange={handleFileChange}
-                    accept=".pdf,.doc,.docx,.pptx,.rtf,.hwp,.hwpx,.xls,.xlsx,.csv,.tsv,.txt,.md,.html,.json,.py,.js,.java,.cpp,.sql,.dart,.ts,.c,.cs,.php,.rb,.go,.rs,.swift,.kt"
+                    accept=".pdf,.doc,.docx,.pptx,.rtf,.hwp,.hwpx,.xls,.xlsx,.csv,.tsv,.txt,.md,.html,.json,.py,.js,.java,.cpp,.sql,.dart,.ts,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.jpg,.jpeg,.png,.webp,.heic,.heif"
                 />
                 <input
                     type="file"
@@ -97,7 +99,12 @@ const DocumentList: React.FC<DocumentListProps> = ({ selectedStore, documents, i
                             <div className="flex items-start justify-between">
                                 <span className="text-sm font-medium break-all line-clamp-2" title={doc.displayName}>{doc.displayName}</span>
                                 <button
-                                    onClick={() => onDelete(doc.name)}
+                                    onClick={() => {
+                                        if (window.confirm(`Are you sure you want to delete ${doc.displayName}?`)) {
+                                            console.log('[DocumentList] Deleting:', doc.name);
+                                            onDelete(doc.name);
+                                        }
+                                    }}
                                     className="ml-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                     <TrashIcon />
