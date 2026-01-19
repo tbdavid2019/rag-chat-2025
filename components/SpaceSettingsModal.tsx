@@ -111,19 +111,19 @@ const SpaceSettingsModal: React.FC<SpaceSettingsModalProps> = ({
                             <label className="block text-sm font-medium text-gem-offwhite">System Prompt (Instructions & Tone)</label>
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nKeep answers concise and under 100 words.").trim())}
+                                    onClick={() => setSystemInstruction(DEFAULT_SYSTEM_INSTRUCTION + "\n\nCRITICAL: Your response MUST be under 100 words. Count carefully and STOP IMMEDIATELY when you reach 100 words. TOTAL LIMIT: 100 words maximum.")}
                                     className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
                                 >
                                     +Concise
                                 </button>
                                 <button
-                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nProvide detailed explanations with examples.").trim())}
+                                    onClick={() => setSystemInstruction(DEFAULT_SYSTEM_INSTRUCTION + "\n\nProvide detailed explanations with examples. Include relevant context and step-by-step guidance where appropriate.")}
                                     className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
                                 >
                                     +Detailed
                                 </button>
                                 <button
-                                    onClick={() => setSystemInstruction(prev => (prev + "\n\nMaintain a professional, formal tone.").trim())}
+                                    onClick={() => setSystemInstruction(DEFAULT_SYSTEM_INSTRUCTION + "\n\nMaintain a professional, formal tone. Use technical terminology appropriately and structure responses clearly.")}
                                     className="text-xs px-2 py-1 bg-gem-mist/20 rounded hover:bg-gem-mist/40 transition-colors"
                                 >
                                     +Professional
