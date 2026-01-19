@@ -353,7 +353,7 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
         for (const [otherUsername, userData] of Object.entries(users.users)) {
             if (otherUsername !== username && userData.geminiApiKey === geminiApiKey) {
                 console.log(`[Server] Gemini API key already in use by user: ${otherUsername}`);
-                return res.status(409).json({ 
+                return res.status(409).json({
                     error: 'API key already in use',
                     message: `此 Gemini API Key 已被用戶 "${otherUsername}" 使用，每個 API Key 只能綁定一個帳號。`
                 });
@@ -363,13 +363,13 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 
     users.users[username].geminiApiKey = geminiApiKey;
     users.users[username].updatedAt = new Date().toISOString();
-    
+
     // 如果清除 API Key，也清空 spaces 陣列
     if (!geminiApiKey || geminiApiKey === null) {
         console.log(`[Server] Clearing spaces for user ${username} due to API key removal`);
         users.users[username].spaces = [];
     }
-    
+
     users.lastModified = new Date().toISOString();
 
     if (writeJSONFile(USERS_FILE, users)) {
@@ -384,7 +384,7 @@ app.put('/api/users/:username/gemini-key', (req, res) => {
 app.get('/api/spaces/list-with-keys', (req, res) => {
     const requestingUser = req.headers['x-username'];
     console.log(`[Spaces] Fetching API keys for user: ${requestingUser}`);
-    
+
     const allApiKeys = readJSONFile(API_KEYS_FILE, { apiKeys: {} });
 
     // 只返回當前用戶的 API Keys
@@ -396,7 +396,7 @@ app.get('/api/spaces/list-with-keys', (req, res) => {
     });
 
     console.log(`[Spaces] Found ${Object.keys(userApiKeys).length} API keys for user: ${requestingUser}`);
-    
+
     res.json({
         apiKeys: userApiKeys,
         lastModified: allApiKeys.lastModified
@@ -465,7 +465,7 @@ app.post('/api/spaces/sync', async (req, res) => {
 
         console.log(`[Sync] ✓ User ${username} spaces updated to: ${shortSpaceNames.join(', ')}`);
 
-        res.json({ 
+        res.json({
             message: 'Spaces synced successfully',
             spacesCount: geminiSpaces.length,
             spaces: shortSpaceNames
@@ -535,10 +535,10 @@ app.post('/api/spaces/:spaceName/generate-key', (req, res) => {
     // 更新用戶的 spaces 列表（從 displayName 中提取 space 名稱）
     if (username && displayName) {
         // displayName 格式為 "username_spacename"，需要提取 spacename
-        const spaceNameWithoutPrefix = displayName.startsWith(`${username}_`) 
+        const spaceNameWithoutPrefix = displayName.startsWith(`${username}_`)
             ? displayName.substring(username.length + 1)
             : displayName;
-        
+
         console.log(`[API Server] Updating user spaces: adding ${spaceNameWithoutPrefix} to ${username}`);
         updateUserSpaces(username, spaceNameWithoutPrefix, 'add');
     }
@@ -582,10 +582,20 @@ app.post('/v1/chat/completions', async (req, res) => {
         const query = lastMessage.content;
 
         // 使用 File Search
+        // Load the system instruction for this space
+        const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+        const spaceSettings = spacesConfig.configs[spaceConfig.spaceName] || {};
+        const systemInstruction = spaceSettings.systemInstruction; // Can be undefined/null/empty
+
+        if (systemInstruction) {
+            console.log(`[API Server] Using custom system instruction for space: ${spaceConfig.spaceName}`);
+        }
+
         const response = await ai.models.generateContent({
             model: model,
             contents: query,
             config: {
+                systemInstruction: systemInstruction, // Pass it here
                 tools: [
                     {
                         fileSearch: {
@@ -600,7 +610,8 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         // Increment usage stats for this space
         const spaceName = spaceConfig.spaceName;
-        const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
+        // spacesConfig already loaded above
+
 
         if (!spacesConfig.configs[spaceName]) {
             spacesConfig.configs[spaceName] = {};
@@ -670,16 +681,16 @@ app.get('/api/spaces/:spaceName/config', (req, res) => {
     const { spaceName } = req.params;
     const username = req.headers['x-username'];
     console.log(`[Config] Get config for space: ${spaceName} (user: ${username})`);
-    
+
     const spacesConfig = readJSONFile(SPACES_CONFIG_FILE, { configs: {} });
     const config = spacesConfig.configs[spaceName] || {
         usageCount: 0,
         model: 'gemini-2.5-flash',
         systemInstruction: ''
     };
-    
-    console.log(`[Config] Config retrieved: usageCount=${config.usageCount}, model=${config.model}`);
-    
+
+    console.log(`[Config] Config retrieved: usageCount=${config.usageCount}, model=${config.model}, systemInstruction=${config.systemInstruction ? config.systemInstruction.substring(0, 50) + '...' : 'EMPTY'}`);
+
     res.json(config);
 });
 

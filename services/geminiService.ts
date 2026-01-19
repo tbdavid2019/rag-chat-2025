@@ -249,6 +249,9 @@ export async function fileSearch(ragStoreName: string, query: string, config?: S
     const systemInstruction = config?.systemInstruction || DEFAULT_SYSTEM_INSTRUCTION;
 
     console.log(`[GeminiService] Using model: ${model}`);
+    if (systemInstruction) {
+        console.log(`[GeminiService] Using system instruction: ${systemInstruction.substring(0, 50)}...`);
+    }
 
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: model,

@@ -496,11 +496,15 @@ const App: React.FC = () => {
 
             // Fetch Space Config
             try {
+                console.log('[App] Fetching space config for:', store.name);
                 const configRes = await fetch(`/api/spaces/${encodeURIComponent(store.name)}/config`);
                 if (configRes.ok) {
                     const config = await configRes.json();
+                    console.log('[App] Space config received:', config);
+                    console.log('[App] systemInstruction:', config.systemInstruction);
                     setCurrentSpaceConfig(config);
                 } else {
+                    console.warn('[App] Config fetch failed with status:', configRes.status);
                     setCurrentSpaceConfig({});
                 }
             } catch (e) {
