@@ -573,8 +573,14 @@ const App: React.FC = () => {
         setIsQueryLoading(true);
 
         try {
-            console.log('[App] Calling fileSearch...');
-            const result = await geminiService.fileSearch(selectedStore.name, message, currentSpaceConfig);
+            console.log('[App] Calling fileSearch with chat history...');
+            // Pass the current chat history (excluding the new user message) for context
+            const result = await geminiService.fileSearch(
+                selectedStore.name,
+                message,
+                currentSpaceConfig,
+                chatHistory  // Pass existing history for context
+            );
             console.log('[App] fileSearch result:', result);
 
             if (!result || !result.text) {
@@ -600,7 +606,7 @@ const App: React.FC = () => {
             // 添加錯誤訊息到聊天記錄
             const errorMsg: ChatMessage = {
                 role: 'model',
-                parts: [{ text: `抱歉，查詢時發生錯誤：${err instanceof Error ? err.message : String(err)}` }]
+                parts: [{ text: `抱歉,查詢時發生錯誤:${err instanceof Error ? err.message : String(err)}` }]
             };
             const errorHistory = [...newHistory, errorMsg];
             setChatHistory(errorHistory);

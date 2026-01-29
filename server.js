@@ -573,13 +573,30 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
 
         console.log(`[API Server] Processing request for space: ${spaceConfig.displayName}`);
+        console.log(`[API Server] Received ${messages.length} messages`);
 
         // 初始化 Gemini
         const ai = new GoogleGenAI({ apiKey: spaceConfig.geminiKey });
 
         // 將 OpenAI 格式的 messages 轉換為 Gemini 格式
-        const lastMessage = messages[messages.length - 1];
-        const query = lastMessage.content;
+        // OpenAI format: [{ role: 'user'|'assistant'|'system', content: 'text' }]
+        // Gemini format: [{ role: 'user'|'model', parts: [{ text: 'text' }] }]
+
+        let geminiContents;
+        if (messages.length === 1) {
+            // 單一訊息,直接使用字串格式
+            geminiContents = messages[0].content;
+            console.log(`[API Server] Using single message format`);
+        } else {
+            // 多輪對話,轉換為 Gemini 格式
+            geminiContents = messages
+                .filter(msg => msg.role !== 'system')  // 過濾掉 system messages
+                .map(msg => ({
+                    role: msg.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: msg.content }]
+                }));
+            console.log(`[API Server] Using multi-turn conversation format with ${geminiContents.length} messages`);
+        }
 
         // 使用 File Search
         // Load the system instruction for this space
@@ -593,7 +610,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         const response = await ai.models.generateContent({
             model: model,
-            contents: query,
+            contents: geminiContents,  // 使用完整對話歷史
             config: {
                 systemInstruction: systemInstruction, // Pass it here
                 tools: [

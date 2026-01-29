@@ -239,10 +239,16 @@ export async function uploadToRagStore(ragStoreName: string, file: File): Promis
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
 export const DEFAULT_SYSTEM_INSTRUCTION = "DO NOT ASK THE USER TO READ THE MANUAL. Provide a direct answer based on the provided context. Pinpoint the relevant sections.";
 
-export async function fileSearch(ragStoreName: string, query: string, config?: SpaceConfig): Promise<QueryResult> {
+export async function fileSearch(
+    ragStoreName: string,
+    query: string,
+    config?: SpaceConfig,
+    chatHistory?: Array<{ role: string; parts: Array<{ text: string }> }>
+): Promise<QueryResult> {
     checkInitialized();
     console.log(`[GeminiService] Performing file search in store: ${ragStoreName}`);
     console.log(`[GeminiService] Query: ${query}`);
+    console.log(`[GeminiService] Chat history length: ${chatHistory?.length || 0}`);
 
     // Default config if not provided
     const model = (config?.model) || DEFAULT_MODEL;
@@ -253,9 +259,30 @@ export async function fileSearch(ragStoreName: string, query: string, config?: S
         console.log(`[GeminiService] Using system instruction: ${systemInstruction.substring(0, 50)}...`);
     }
 
+    // Build contents array from chat history
+    let contents: any;
+    if (chatHistory && chatHistory.length > 0) {
+        // Convert chat history to Gemini format
+        // Include previous messages for context
+        contents = chatHistory.map(msg => ({
+            role: msg.role === 'model' ? 'model' : 'user',
+            parts: msg.parts.map(part => ({ text: part.text }))
+        }));
+        // Add current query
+        contents.push({
+            role: 'user',
+            parts: [{ text: query }]
+        });
+        console.log(`[GeminiService] Using ${contents.length} messages for context (including current query)`);
+    } else {
+        // No history, just use current query
+        contents = query;
+        console.log(`[GeminiService] No chat history, using single query`);
+    }
+
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: model,
-        contents: query,
+        contents: contents,
         config: {
             systemInstruction: systemInstruction,
             tools: [
