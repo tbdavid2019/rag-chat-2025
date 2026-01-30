@@ -370,9 +370,24 @@ Express (3000)
 - **每個空間擁有唯一的 API Key**：`grag-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 - **服務器根據 API Key 自動識別並使用對應空間的文檔庫**
 - **生產環境單端口架構**：SSL 證書只需配置一次
+- **無狀態設計**：符合 OpenAI API 標準，客戶端負責管理對話歷史
 
-### 使用範例
+### 對話上下文管理 (重要!)
 
+本 API 採用 **OpenAI 標準的無狀態 (Stateless) 設計**：
+
+#### 設計原則
+
+✅ **客戶端管理對話歷史** - 每次請求需帶完整的 `messages` 陣列  
+✅ **伺服器無 Session** - 不儲存對話狀態，易於擴展  
+✅ **完整上下文支援** - 支援多輪對話，AI 能理解代詞引用  
+
+❌ **不使用 Session ID** - 這是 OpenAI API 的標準做法  
+❌ **伺服器不儲存歷史** - 每次請求都是獨立的  
+
+#### 實作範例
+
+**單輪對話** (無上下文):
 ```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer YOUR_API_KEY" \
@@ -380,10 +395,131 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -d '{
     "model": "gemini-2.5-flash",
     "messages": [
-      {"role": "user", "content": "你的問題"}
+      {"role": "user", "content": "Ploom X 是什麼?"}
     ]
   }'
 ```
+
+**多輪對話** (帶上下文):
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {"role": "user", "content": "Ploom X 是什麼?"},
+      {"role": "assistant", "content": "Ploom X 是一款加熱菸設備..."},
+      {"role": "user", "content": "它的價格是多少?"}
+    ]
+  }'
+```
+
+> 💡 **注意**：第二輪對話中，AI 能理解「它」指的是 Ploom X，因為我們傳遞了完整的對話歷史。
+
+#### JavaScript/TypeScript 範例
+
+```javascript
+// 客戶端維護對話歷史
+let conversationHistory = [];
+
+async function chat(userMessage) {
+  // 添加用戶訊息
+  conversationHistory.push({
+    role: "user",
+    content: userMessage
+  });
+
+  // 發送請求 (帶完整歷史)
+  const response = await fetch('http://localhost:3000/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gemini-2.5-flash',
+      messages: conversationHistory  // ← 傳遞完整歷史
+    })
+  });
+
+  const data = await response.json();
+  const assistantMessage = data.choices[0].message.content;
+
+  // 添加 AI 回應到歷史
+  conversationHistory.push({
+    role: "assistant",
+    content: assistantMessage
+  });
+
+  return assistantMessage;
+}
+
+// 使用範例
+await chat("Ploom X 是什麼?");           // 第一輪
+await chat("它的價格是多少?");            // 第二輪 - AI 知道「它」指 Ploom X
+await chat("在哪裡可以買到?");            // 第三輪 - 持續保持上下文
+```
+
+#### Python 範例
+
+```python
+import requests
+
+# 客戶端維護對話歷史
+conversation_history = []
+
+def chat(user_message):
+    # 添加用戶訊息
+    conversation_history.append({
+        "role": "user",
+        "content": user_message
+    })
+    
+    # 發送請求 (帶完整歷史)
+    response = requests.post(
+        'http://localhost:3000/v1/chat/completions',
+        headers={
+            'Authorization': 'Bearer YOUR_API_KEY',
+            'Content-Type': 'application/json'
+        },
+        json={
+            'model': 'gemini-2.5-flash',
+            'messages': conversation_history  # ← 傳遞完整歷史
+        }
+    )
+    
+    data = response.json()
+    assistant_message = data['choices'][0]['message']['content']
+    
+    # 添加 AI 回應到歷史
+    conversation_history.append({
+        "role": "assistant",
+        "content": assistant_message
+    })
+    
+    return assistant_message
+
+# 使用範例
+chat("Ploom X 是什麼?")        # 第一輪
+chat("它的價格是多少?")         # 第二輪 - AI 知道「它」指 Ploom X
+chat("在哪裡可以買到?")         # 第三輪 - 持續保持上下文
+```
+
+#### 為什麼這樣設計?
+
+這是業界標準做法，所有主流 AI API 都採用此設計：
+
+**優點**：
+- ✅ 簡單、可擴展 - 伺服器無狀態，易於水平擴展
+- ✅ 靈活性高 - 客戶端完全控制對話流程
+- ✅ 無需管理 Session - 不用處理 session 過期、清理等問題
+- ✅ 符合 RESTful 原則
+
+**注意事項**：
+- 💰 Token 消耗 - 每次請求都會重新處理完整歷史，消耗較多 tokens
+- 📦 傳輸量 - 對話越長，請求體積越大
+- 🧹 歷史管理 - 客戶端需自行決定何時清除歷史(例如：開始新對話)
 
 ### 兼容工具
 
@@ -391,6 +527,8 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 - Cursor AI
 - Continue.dev
 - LibreChat
+- LangChain
+- LlamaIndex
 - 其他支援自定義 OpenAI endpoint 的應用
 
 ## 疑難排解
