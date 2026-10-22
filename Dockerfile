@@ -1,5 +1,5 @@
-# 使用 Node.js 20 LTS Alpine 作為基底映像（穩定且輕量）
-FROM node:20-alpine AS builder
+# 使用 Node.js 22 LTS Alpine 作為基底映像（穩定且輕量）
+FROM node:22.23.4-alpine AS builder
 
 # 設定工作目錄
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # ===== 最終映像 =====
-FROM node:20-alpine
+FROM node:22.23.4-alpine
 
 # 安裝 dumb-init 和 su-exec
 RUN apk add --no-cache dumb-init su-exec
