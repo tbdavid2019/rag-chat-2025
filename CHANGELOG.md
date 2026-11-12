@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.12] - 2026-11-12
+
+### 🛡️ Security & Runtime Upgrade (Node.js 26.13.1 Security Hardening)
+- **容器基底全面升級 Node.js 26 (`node:26.13.1-alpine`)**:
+  - `Dockerfile` 多階段構建（builder 與 runner）基底映像全面升級為 `node:26.13.1-alpine`。
+  - 完整防護 Node.js 官方 2026-11-11 安全公告修復之多項 High severity 安全性漏洞。
+
 ## [2026.10.25] - 2026-10-25
 
 ### 🛡️ Security & Runtime Upgrade (Node.js 26.12.1 Security Hardening)
